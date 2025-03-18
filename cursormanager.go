@@ -54,12 +54,23 @@ func (cm *CursorMgr) ReturnLine() string {
 	return content
 }
 
-func (cm *CursorMgr) InsertRune(r Rune) {
-	err := cm.buffer.InsertRune(r, cm.cursor)
+func (cm *CursorMgr) InsertByte(b byte) {
+	err := cm.buffer.InsertByte(b, cm.cursor)
 	if err != nil {
 		log.Fatalf("error inserting rune: %v", err)
 	}
-	cm.cursor += len(r)
+	cm.cursor += 1
+}
+
+func (cm *CursorMgr) BackspaceAtCursor() {
+	if cm.cursor == 0 {
+		return
+	}
+	err := cm.buffer.DeleteByte(cm.cursor - 1)
+	if err != nil {
+		log.Fatalf("error deleting rune: %v", err)
+	}
+	cm.cursor -= 1
 }
 
 func (cm *CursorMgr) GetInfo() string {

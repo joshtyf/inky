@@ -16,6 +16,7 @@ const (
 	ArrowDown
 	ArrowLeft
 	ArrowRight
+	Delete
 )
 
 func readUserInput(charInput chan<- byte, keyInput chan<- ArrowKey) {
@@ -46,8 +47,14 @@ func readUserInput(charInput chan<- byte, keyInput chan<- ArrowKey) {
 			log.Printf("error reading from stdin: %v", err)
 			return
 		}
+		// Assume that the input is ASCII
 		if n == 1 {
-			charInput <- b[0]
+			switch b[0] {
+			case 127:
+				keyInput <- Delete
+			default:
+				charInput <- b[0]
+			}
 			continue
 		} else if n == 3 && b[0] == 0x1b {
 			switch b[2] {
@@ -87,7 +94,7 @@ func main() {
 			log.Println("Received signal, exiting")
 			return
 		case input := <-charInput:
-			cm.InsertRune([]byte{input})
+			cm.InsertByte(input)
 		case input := <-keyInput:
 			// Clear the screen
 			log.Printf("%s%s", cursorHome, clearScreen)
@@ -100,6 +107,8 @@ func main() {
 				cm.MoveCursorUp(1)
 			case ArrowDown:
 				cm.MoveCursorDown(1)
+			case Delete:
+				cm.BackspaceAtCursor()
 			}
 		}
 		log.Print(buf.GetInfo())

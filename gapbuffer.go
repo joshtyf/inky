@@ -172,12 +172,12 @@ func (gb *GapBuffer) ReadTillNewLine(cursor int) (string, error) {
 	return string(gb.buffer[pos:endPos]), nil
 }
 
-func (gb *GapBuffer) InsertRune(r Rune, cursor int) error {
+func (gb *GapBuffer) InsertByte(b byte, cursor int) error {
 	if cursor < 0 || cursor > gb.Len() {
 		return ErrInvalidPosition{errPos: cursor}
 	}
-	if len(r) > gb.getGapSize() {
-		gb.resizeBuffer(len(r))
+	if gb.getGapSize() == 0 {
+		gb.resizeBuffer(len(gb.buffer) + 1)
 	}
 	pos := gb.cursorToBufferPos(cursor)
 	if pos < gb.gapStart {
@@ -191,8 +191,29 @@ func (gb *GapBuffer) InsertRune(r Rune, cursor int) error {
 			return ErrInvalidPosition{errPos: cursor}
 		}
 	}
-	copy(gb.buffer[gb.gapStart:], r)
-	gb.gapStart += len(r)
+	gb.buffer[gb.gapStart] = b
+	gb.gapStart += 1
+	return nil
+}
+
+func (gb *GapBuffer) DeleteByte(cursor int) error {
+	if cursor < 0 || cursor > gb.Len() {
+		return ErrInvalidPosition{errPos: cursor}
+	}
+	pos := gb.cursorToBufferPos(cursor)
+	if pos < gb.gapStart {
+		if err := gb.shiftGapStartTo(pos); err != nil {
+			log.Printf("error shifting gap start to %d: %v", pos, err)
+			return ErrInvalidPosition{errPos: cursor}
+		}
+	} else {
+		if err := gb.shiftGapEndTo(pos); err != nil {
+			log.Printf("error shifting gap end to %d: %v", pos, err)
+			return ErrInvalidPosition{errPos: cursor}
+		}
+	}
+	clear(gb.buffer[gb.gapEnd : gb.gapEnd+1])
+	gb.gapEnd += 1
 	return nil
 }
 
