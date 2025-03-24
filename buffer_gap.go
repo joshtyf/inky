@@ -63,10 +63,10 @@ func (gb *GapBuffer) shiftGapEndTo(pos int) error {
 		return nil
 	}
 	delta := pos - gb.gapEnd
-	gapToMove := gb.buffer[gb.gapEnd : gb.gapEnd+delta]
-	gapToFill := gb.buffer[gb.gapStart : gb.gapStart+delta]
-	copy(gapToFill, gapToMove)
-	clear(gapToMove)
+	toMove := gb.buffer[gb.gapEnd : gb.gapEnd+delta]
+	toFill := gb.buffer[gb.gapStart : gb.gapStart+delta]
+	copy(toFill, toMove)
+	clear(gb.buffer[pos-gb.getGapSize() : pos])
 	gb.gapStart += delta
 	gb.gapEnd += delta
 	return nil
@@ -80,10 +80,10 @@ func (gb *GapBuffer) shiftGapStartTo(pos int) error {
 		return nil
 	}
 	delta := gb.gapStart - pos
-	gapToMove := gb.buffer[gb.gapStart-delta : gb.gapStart]
-	gapToFill := gb.buffer[gb.gapEnd-delta : gb.gapEnd]
-	copy(gapToFill, gapToMove)
-	clear(gapToMove)
+	toMove := gb.buffer[gb.gapStart-delta : gb.gapStart]
+	toFill := gb.buffer[gb.gapEnd-delta : gb.gapEnd]
+	copy(toFill, toMove)
+	clear(gb.buffer[pos : pos+gb.getGapSize()])
 	gb.gapStart -= delta
 	gb.gapEnd -= delta
 	return nil
