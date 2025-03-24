@@ -8,5 +8,6 @@ type Buffer interface {
 	FindPrevLine(cursor int) (int, error)
 	ReadTillNewLine(cursor int) (string, error)
 	DeleteByte(cursor int) error
+	GetByte(cursor int) (byte, error)
 	Len() int
 }

@@ -17,6 +17,7 @@ const (
 	ArrowLeft
 	ArrowRight
 	Delete
+	NewLine
 )
 
 func readUserInput(charInput chan<- byte, keyInput chan<- ArrowKey) {
@@ -50,6 +51,8 @@ func readUserInput(charInput chan<- byte, keyInput chan<- ArrowKey) {
 		// Assume that the input is ASCII
 		if n == 1 {
 			switch b[0] {
+			case 10:
+				keyInput <- NewLine
 			case 127:
 				keyInput <- Delete
 			default:
@@ -78,7 +81,7 @@ func main() {
 	log.SetFlags(0)
 
 	buf := NewGapBuffer()
-	cm := NewCursorMgr(buf)
+	cm := NewCursorMgr()
 
 	// // Read from file
 	// fileBuffer := NewFileBuffer("sample.txt")
@@ -94,25 +97,27 @@ func main() {
 			log.Println("Received signal, exiting")
 			return
 		case input := <-charInput:
-			cm.InsertByte(input)
+			cm.InsertAtCursor(input, buf)
 		case input := <-keyInput:
 			// Clear the screen
 			log.Printf("%s%s", cursorHome, clearScreen)
 			switch input {
 			case ArrowLeft:
-				cm.MoveCursorLeft(1)
+				cm.MoveCursorLeft()
 			case ArrowRight:
-				cm.MoveCursorRight(1)
+				cm.MoveCursorRight()
 			case ArrowUp:
-				cm.MoveCursorUp(1)
+				cm.MoveCursorUp()
 			case ArrowDown:
-				cm.MoveCursorDown(1)
+				cm.MoveCursorDown()
 			case Delete:
-				cm.BackspaceAtCursor()
+				cm.BackspaceAtCursor(buf)
+			case NewLine:
+				cm.InsertAtCursor('\n', buf)
 			}
 		}
 		log.Print(buf.GetInfo())
 		log.Print(cm.GetInfo())
-		log.Print(cm.ReturnLine())
+		log.Print(cm.ReturnLine(buf))
 	}
 }

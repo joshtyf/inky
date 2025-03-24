@@ -116,7 +116,7 @@ func (gb *GapBuffer) seekToEndOfLine(pos int) (int, error) {
 }
 
 func (gb *GapBuffer) seekToStartOfLine(pos int) (int, error) {
-	if pos < 0 || pos > gb.Len() {
+	if pos < 0 || pos > len(gb.buffer) {
 		return -1, ErrInvalidPosition{errPos: pos}
 	}
 	for i := pos; i >= 0; i-- {
@@ -131,7 +131,7 @@ func (gb *GapBuffer) seekToStartOfLine(pos int) (int, error) {
 }
 
 func (gb *GapBuffer) FindNextLine(cursor int) (int, error) {
-	if cursor < 0 || cursor > gb.Len() {
+	if cursor < 0 || cursor >= gb.Len() {
 		return -1, ErrInvalidPosition{errPos: cursor}
 	}
 	pos := gb.cursorToBufferPos(cursor)
@@ -145,23 +145,24 @@ func (gb *GapBuffer) FindNextLine(cursor int) (int, error) {
 	return gb.bufferPosToCursor(endPos + 1), nil
 }
 
+// Returns -1 if the cursor points to the first line
 func (gb *GapBuffer) FindPrevLine(cursor int) (int, error) {
-	if cursor < 0 || cursor > gb.Len() {
+	if cursor < 0 || cursor >= gb.Len() {
 		return -1, ErrInvalidPosition{errPos: cursor}
 	}
 	pos := gb.cursorToBufferPos(cursor)
+	if (pos == len(gb.buffer) || gb.buffer[pos] == '\n') && pos > 0 {
+		pos -= 1
+	}
 	startPos, err := gb.seekToStartOfLine(pos)
 	if err != nil {
 		return -1, ErrInvalidPosition{errPos: cursor}
-	}
-	if startPos == 0 {
-		return 0, nil
 	}
 	return gb.bufferPosToCursor(startPos - 1), nil
 }
 
 func (gb *GapBuffer) ReadTillNewLine(cursor int) (string, error) {
-	if cursor < 0 || cursor > gb.Len() {
+	if cursor < 0 || cursor >= gb.Len() {
 		return "", ErrInvalidPosition{errPos: cursor}
 	}
 	pos := gb.cursorToBufferPos(cursor)
@@ -173,7 +174,7 @@ func (gb *GapBuffer) ReadTillNewLine(cursor int) (string, error) {
 }
 
 func (gb *GapBuffer) InsertByte(b byte, cursor int) error {
-	if cursor < 0 || cursor > gb.Len() {
+	if cursor < 0 || cursor > gb.Len()+1 { // +1 because we can insert at the end of the buffer
 		return ErrInvalidPosition{errPos: cursor}
 	}
 	if gb.getGapSize() == 0 {
@@ -197,7 +198,7 @@ func (gb *GapBuffer) InsertByte(b byte, cursor int) error {
 }
 
 func (gb *GapBuffer) DeleteByte(cursor int) error {
-	if cursor < 0 || cursor > gb.Len() {
+	if cursor < 0 || cursor >= gb.Len() {
 		return ErrInvalidPosition{errPos: cursor}
 	}
 	pos := gb.cursorToBufferPos(cursor)
@@ -215,6 +216,14 @@ func (gb *GapBuffer) DeleteByte(cursor int) error {
 	clear(gb.buffer[gb.gapEnd : gb.gapEnd+1])
 	gb.gapEnd += 1
 	return nil
+}
+
+func (gb *GapBuffer) GetByte(cursor int) (byte, error) {
+	if cursor < 0 || cursor >= gb.Len() {
+		return 0, ErrInvalidPosition{errPos: cursor}
+	}
+	pos := gb.cursorToBufferPos(cursor)
+	return gb.buffer[pos], nil
 }
 
 func (gb *GapBuffer) Len() int {
