@@ -14,7 +14,7 @@ func NewTerminalInput() *TerminalInput {
 	return &TerminalInput{}
 }
 
-func (ti *TerminalInput) readUserInput(charInput chan<- byte, keyInput chan<- ArrowKey) {
+func (ti *TerminalInput) receive(charInput chan<- byte, keyInput chan<- ArrowKey) {
 	// TODO: Make it cross-platform
 	termios, err := unix.IoctlGetTermios(int(os.Stdin.Fd()), unix.TIOCGETA)
 	if err != nil {

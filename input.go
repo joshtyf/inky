@@ -11,6 +11,6 @@ const (
 	NewLine
 )
 
-type InputReader interface {
-	readUserInput(charInput chan<- byte, keyInput chan<- ArrowKey)
+type Input interface {
+	receive(charInput chan<- byte, keyInput chan<- ArrowKey)
 }

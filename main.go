@@ -26,7 +26,7 @@ func main() {
 	charInput := make(chan byte)
 	keyInput := make(chan ArrowKey)
 	terminalInput := NewTerminalInput()
-	go terminalInput.readUserInput(charInput, keyInput)
+	go terminalInput.receive(charInput, keyInput)
 
 	for {
 		select {
