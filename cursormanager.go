@@ -12,12 +12,34 @@ type CursorMgr struct {
 	currentColumn int
 }
 
-func NewCursorMgr() *CursorMgr {
-	return &CursorMgr{
+type CursorMgrOption func(*CursorMgr)
+
+func WithBuffer(buffer Buffer) CursorMgrOption {
+	return func(cm *CursorMgr) {
+		cursor := 0
+		lines := make([]int, 0)
+		for cursor < buffer.Len() {
+			nextLine, err := buffer.FindNextLine(cursor)
+			if err != nil {
+				log.Fatalf("error finding next line: %v", err)
+			}
+			lines = append(lines, nextLine-cursor)
+			cursor = nextLine
+		}
+		cm.lines = lines
+	}
+}
+
+func NewCursorMgr(options ...CursorMgrOption) *CursorMgr {
+	cm := &CursorMgr{
 		lines:         make([]int, 1),
 		currentLine:   0,
 		currentColumn: 0,
 	}
+	for _, o := range options {
+		o(cm)
+	}
+	return cm
 }
 
 func (cm *CursorMgr) getCursor() int {

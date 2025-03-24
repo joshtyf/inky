@@ -31,6 +31,16 @@ func NewGapBuffer() *GapBuffer {
 	}
 }
 
+func NewGapBufferWithContent(content []byte) *GapBuffer {
+	buf := make([]byte, len(content)+DEFAULT_BUFFER_SIZE)
+	copy(buf, content)
+	return &GapBuffer{
+		buffer:   buf,
+		gapStart: len(content),
+		gapEnd:   len(buf),
+	}
+}
+
 func (gb *GapBuffer) cursorToBufferPos(cursor int) int {
 	if cursor < gb.gapStart {
 		return cursor

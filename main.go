@@ -80,10 +80,13 @@ func main() {
 	// Remove all log prefix
 	log.SetFlags(0)
 
-	buf := NewGapBuffer()
-	cm := NewCursorMgr()
-
 	// // Read from file
+	fileContent, err := os.ReadFile("sample.txt")
+	if err != nil {
+		log.Fatalf("error reading file: %v", err)
+	}
+	buf := NewGapBufferWithContent(fileContent)
+	cm := NewCursorMgr(WithBuffer(buf))
 	// fileBuffer := NewFileBuffer("sample.txt")
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
@@ -116,7 +119,7 @@ func main() {
 				cm.InsertAtCursor('\n', buf)
 			}
 		}
-		log.Print(buf.GetInfo())
+		// log.Print(buf.GetInfo())
 		log.Print(cm.GetInfo())
 		log.Print(cm.ReturnLine(buf))
 	}
