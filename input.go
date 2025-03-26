@@ -1,9 +1,9 @@
 package main
 
-type ArrowKey int
+type SpecialKey int
 
 const (
-	ArrowUp ArrowKey = iota
+	ArrowUp SpecialKey = iota
 	ArrowDown
 	ArrowLeft
 	ArrowRight
@@ -11,6 +11,8 @@ const (
 	NewLine
 )
 
+var DEFAULT_INPUT = NewTerminalInput()
+
 type Input interface {
-	receive(charInput chan<- byte, keyInput chan<- ArrowKey)
+	transmit(charOut chan<- byte, keyOut chan<- SpecialKey)
 }

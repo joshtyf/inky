@@ -7,6 +7,26 @@ import (
 	"syscall"
 )
 
+func startInput(i Input, km KeyMap) (<-chan byte, <-chan SpecialKey) {
+	mappedCharOut := make(chan byte)
+	mappedKeyOut := make(chan SpecialKey)
+	transmitCharOut := make(chan byte)
+	transmitKeyOut := make(chan SpecialKey)
+
+	go i.transmit(transmitCharOut, transmitKeyOut)
+	go func() {
+		for {
+			select {
+			case b := <-transmitCharOut:
+				km.mapByte(b, mappedCharOut, mappedKeyOut)
+			case k := <-transmitKeyOut:
+				km.mapSpecialKey(k, mappedCharOut, mappedKeyOut)
+			}
+		}
+	}()
+	return mappedCharOut, mappedKeyOut
+}
+
 func main() {
 	// Remove all log prefix
 	log.SetFlags(0)
@@ -23,10 +43,7 @@ func main() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	// Set up input channels
-	charInput := make(chan byte)
-	keyInput := make(chan ArrowKey)
-	terminalInput := NewTerminalInput()
-	go terminalInput.receive(charInput, keyInput)
+	charInput, keyInput := startInput(DEFAULT_INPUT, DEFAULT_KEYMAP)
 
 	for {
 		select {

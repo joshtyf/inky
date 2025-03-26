@@ -14,7 +14,7 @@ func NewTerminalInput() *TerminalInput {
 	return &TerminalInput{}
 }
 
-func (ti *TerminalInput) receive(charInput chan<- byte, keyInput chan<- ArrowKey) {
+func (ti *TerminalInput) transmit(charOut chan<- byte, keyOut chan<- SpecialKey) {
 	// TODO: Make it cross-platform
 	termios, err := unix.IoctlGetTermios(int(os.Stdin.Fd()), unix.TIOCGETA)
 	if err != nil {
@@ -46,23 +46,23 @@ func (ti *TerminalInput) receive(charInput chan<- byte, keyInput chan<- ArrowKey
 		if n == 1 {
 			switch b[0] {
 			case 10:
-				keyInput <- NewLine
+				keyOut <- NewLine
 			case 127:
-				keyInput <- Delete
+				keyOut <- Delete
 			default:
-				charInput <- b[0]
+				charOut <- b[0]
 			}
 			continue
 		} else if n == 3 && b[0] == 0x1b {
 			switch b[2] {
 			case 'A':
-				keyInput <- ArrowUp
+				keyOut <- ArrowUp
 			case 'B':
-				keyInput <- ArrowDown
+				keyOut <- ArrowDown
 			case 'C':
-				keyInput <- ArrowRight
+				keyOut <- ArrowRight
 			case 'D':
-				keyInput <- ArrowLeft
+				keyOut <- ArrowLeft
 			}
 		} else {
 			log.Printf("Received unexpected input: %v", b[:n])

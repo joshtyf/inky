@@ -2,6 +2,10 @@
 
 ## Progress
 
+### 26/03/2025
+
+Implemented a basic keymapping for the text editor. With this keymapping, I can potentially implement more complex keymaps (possibly vim motions?). Toughest part was figuring out how to design my code that adhere to good design principles. I'm also thinking if features like keymapping, undo/redo, etc. should be implemented as middleware -- basically passing the user input through a series of transformation functions before it reaches the buffer. Not sure if this is the right thinking though.
+
 ### 24/03/2025
 
 Mainly did refactorings and bug fixes. I'm refactoring to ensure that I can implement different types of buffers (rope and piece table will likely be next). I'm also looking to implement undo/redo functionality.
