@@ -27,37 +27,23 @@ func main() {
 	}
 	buf := NewGapBufferWithContent(fileContent)
 	cm := NewCursorMgr(WithBuffer(buf))
-
+	cc := NewCommandController(cm, buf)
 	// Set up signal channels
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	// Set up input channels
 	charInput, keyInput := startInput(DEFAULT_INPUT)
+	// Set up command channel
+	commandCh := cc.processInput(charInput, keyInput)
 
 	for {
 		select {
 		case <-sigChan:
 			log.Println("Received signal, exiting")
 			return
-		case input := <-charInput:
-			cm.InsertAtCursor(input, buf)
-		case input := <-keyInput:
-			// Clear the screen
+		case command := <-commandCh:
 			log.Printf("%s%s", cursorHome, clearScreen)
-			switch input {
-			case ArrowLeft:
-				cm.MoveCursorLeft()
-			case ArrowRight:
-				cm.MoveCursorRight()
-			case ArrowUp:
-				cm.MoveCursorUp()
-			case ArrowDown:
-				cm.MoveCursorDown()
-			case Delete:
-				cm.BackspaceAtCursor(buf)
-			case NewLine:
-				cm.InsertAtCursor('\n', buf)
-			}
+			command.execute()
 		}
 		// log.Print(buf.GetInfo())
 		log.Print(cm.GetInfo())

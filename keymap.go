@@ -7,6 +7,9 @@ func mapBytes(b []byte, n int, charOut chan<- byte, keyOut chan<- SpecialKey) {
 		switch b[0] {
 		case 10:
 			keyOut <- NewLine
+		case 31: // Currently customied for cmd+z in VSCode
+			// TODO: read a user config file to get the key mapping
+			keyOut <- Undo
 		case 127:
 			keyOut <- Delete
 		default:
@@ -22,6 +25,8 @@ func mapBytes(b []byte, n int, charOut chan<- byte, keyOut chan<- SpecialKey) {
 			keyOut <- ArrowRight
 		case 'D':
 			keyOut <- ArrowLeft
+		default:
+			log.Printf("Received unexpected input: %v", b[:n])
 		}
 	} else {
 		log.Printf("Received unexpected input: %v", b[:n])

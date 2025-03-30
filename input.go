@@ -9,6 +9,7 @@ const (
 	ArrowRight
 	Delete
 	NewLine
+	Undo
 )
 
 var DEFAULT_INPUT = NewTerminalInput()

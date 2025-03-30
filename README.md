@@ -2,6 +2,10 @@
 
 ## Progress
 
+### 30/03/2025
+
+Implemented a very naive undo functionality. I thought I could use a simple command pattern, however my commands are either cursor movements or editing 1 byte at a time. This makes the undo function a very terrible user experience. After playing around with other text editors like Apple Notes, I realised that undo should at least delete the last typed word or if the content is bulk inserted (e.g. pasting), it should delete the entire pasted content. Such a functionality is way harder to implement and I will need to rethink my design. Unfortunately, there is not a lot of information readily available online for me to consult. I did find a few good ones that point me in a general direction, but not enough to implement a good solution. Life's tough.
+
 ### 26/03/2025
 
 Implemented a basic keymapping for the text editor. With this keymapping, I can potentially implement more complex keymaps (possibly vim motions?). Toughest part was figuring out how to design my code that adhere to good design principles. I'm also thinking if features like keymapping, undo/redo, etc. should be implemented as middleware -- basically passing the user input through a series of transformation functions before it reaches the buffer. Not sure if this is the right thinking though.
