@@ -1,24 +1,29 @@
 package main
 
-var DEFAULT_KEYMAP = NewBasicKeyMap()
+import "log"
 
-type KeyMap interface {
-	mapByte(b byte, charOut chan<- byte, keyOut chan<- SpecialKey) error
-	mapSpecialKey(k SpecialKey, charOut chan<- byte, keyOut chan<- SpecialKey) error
-}
-
-type BasicKeyMap struct{}
-
-func NewBasicKeyMap() *BasicKeyMap {
-	return &BasicKeyMap{}
-}
-
-func (km *BasicKeyMap) mapByte(b byte, charOut chan<- byte, keyOut chan<- SpecialKey) error {
-	charOut <- b
-	return nil
-}
-
-func (km *BasicKeyMap) mapSpecialKey(k SpecialKey, charOut chan<- byte, keyOut chan<- SpecialKey) error {
-	keyOut <- k
-	return nil
+func mapBytes(b []byte, n int, charOut chan<- byte, keyOut chan<- SpecialKey) {
+	if n == 1 {
+		switch b[0] {
+		case 10:
+			keyOut <- NewLine
+		case 127:
+			keyOut <- Delete
+		default:
+			charOut <- b[0]
+		}
+	} else if n == 3 && b[0] == 0x1b {
+		switch b[2] {
+		case 'A':
+			keyOut <- ArrowUp
+		case 'B':
+			keyOut <- ArrowDown
+		case 'C':
+			keyOut <- ArrowRight
+		case 'D':
+			keyOut <- ArrowLeft
+		}
+	} else {
+		log.Printf("Received unexpected input: %v", b[:n])
+	}
 }

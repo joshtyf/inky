@@ -42,30 +42,6 @@ func (ti *TerminalInput) transmit(charOut chan<- byte, keyOut chan<- SpecialKey)
 			log.Printf("error reading from stdin: %v", err)
 			return
 		}
-		// Assume that the input is ASCII
-		if n == 1 {
-			switch b[0] {
-			case 10:
-				keyOut <- NewLine
-			case 127:
-				keyOut <- Delete
-			default:
-				charOut <- b[0]
-			}
-			continue
-		} else if n == 3 && b[0] == 0x1b {
-			switch b[2] {
-			case 'A':
-				keyOut <- ArrowUp
-			case 'B':
-				keyOut <- ArrowDown
-			case 'C':
-				keyOut <- ArrowRight
-			case 'D':
-				keyOut <- ArrowLeft
-			}
-		} else {
-			log.Printf("Received unexpected input: %v", b[:n])
-		}
+		mapBytes(b[:], n, charOut, keyOut)
 	}
 }
