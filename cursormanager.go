@@ -114,12 +114,16 @@ func (cm *CursorMgr) InsertAtCursor(b byte, buffer Buffer) {
 	}
 }
 
-func (cm *CursorMgr) BackspaceAtCursor(buffer Buffer) {
+func (cm *CursorMgr) BackspaceAtCursor(buffer Buffer) byte {
 	cursor := cm.getCursor()
 	if cursor == 0 {
-		return
+		return 0
 	}
-	err := buffer.DeleteByte(cursor - 1)
+	toDelete, err := buffer.GetByte(cursor - 1)
+	if err != nil {
+		log.Fatalf("error getting byte: %v", err)
+	}
+	err = buffer.DeleteByte(cursor - 1)
 	if err != nil {
 		log.Fatalf("error deleting byte: %v", err)
 	}
@@ -133,6 +137,7 @@ func (cm *CursorMgr) BackspaceAtCursor(buffer Buffer) {
 	}
 	cm.currentColumn--
 	cm.lines[cm.currentLine] -= 1
+	return toDelete
 }
 
 func (cm *CursorMgr) GetInfo() string {
