@@ -2,6 +2,14 @@
 
 ## Progress
 
+### 03/04/2025
+
+Updated the undo functionality to delete the last typed word instead of a single character. I am currently tracking the changes using a `changeStart` and `changeLen` variable. Undoes are stored whenever there's a new whitespace or newline. Recalculating the cursor and indices was really difficult and I'm pretty sure my code is still imperfect (there's probably an edge case that I'm not accounting for).
+
+In the process of implementing, I made huge changes to the code and fixed a lot of bugs (largely index errors). I'm sure I will catch more bugs when I try to implement undo delete.
+
+Also, I'm not sure if I will be satisfied to implement my undo as a stack. I looked at some references like vim and other text editors (and plugins), and the action history is stored as a tree. Also, the undo chain is "append only" -- every undo action just creates an inverse of the last action and appends to the history, rather than reversing the last action. While I understand the benefits, I decided to just keep it simple for now.
+
 ### 30/03/2025
 
 Implemented a very naive undo functionality. I thought I could use a simple command pattern, however my commands are either cursor movements or editing 1 byte at a time. This makes the undo function a very terrible user experience. After playing around with other text editors like Apple Notes, I realised that undo should at least delete the last typed word or if the content is bulk inserted (e.g. pasting), it should delete the entire pasted content. Such a functionality is way harder to implement and I will need to rethink my design. Unfortunately, there is not a lot of information readily available online for me to consult. I did find a few good ones that point me in a general direction, but not enough to implement a good solution. Life's tough.
