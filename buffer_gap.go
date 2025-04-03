@@ -18,16 +18,24 @@ func (e ErrInvalidPosition) Error() string {
 }
 
 type GapBuffer struct {
-	buffer   []byte
-	gapStart int
-	gapEnd   int
+	buffer      []byte
+	gapStart    int
+	gapEnd      int
+	bufSaved    bool
+	changeStart int
+	changeLen   int
+	undoList    []*UndoNode
 }
 
 func NewGapBuffer() *GapBuffer {
 	return &GapBuffer{
-		buffer:   make([]byte, DEFAULT_BUFFER_SIZE),
-		gapStart: 0,
-		gapEnd:   DEFAULT_BUFFER_SIZE,
+		buffer:      make([]byte, DEFAULT_BUFFER_SIZE),
+		gapStart:    0,
+		gapEnd:      DEFAULT_BUFFER_SIZE,
+		bufSaved:    true,
+		changeStart: 0,
+		changeLen:   0,
+		undoList:    make([]*UndoNode, 0),
 	}
 }
 
@@ -42,14 +50,14 @@ func NewGapBufferWithContent(content []byte) *GapBuffer {
 }
 
 func (gb *GapBuffer) cursorToBufferPos(cursor int) int {
-	if cursor < gb.gapStart {
+	if cursor <= gb.gapStart {
 		return cursor
 	}
 	return cursor + gb.getGapSize()
 }
 
 func (gb *GapBuffer) bufferPosToCursor(pos int) int {
-	if pos < gb.gapStart {
+	if pos <= gb.gapStart {
 		return pos
 	}
 	return pos - gb.getGapSize()
@@ -106,10 +114,27 @@ func (gb *GapBuffer) resizeBuffer(requiredSize int) {
 	gb.gapEnd = len(newBuf) - sizeOfRight
 }
 
-func (gb *GapBuffer) seekToEndOfLine(pos int) (int, error) {
-	if pos < 0 || pos > len(gb.buffer) {
-		return -1, ErrInvalidPosition{errPos: pos}
+func (gb *GapBuffer) save() error {
+	if !gb.bufSaved {
+		gb.bufSaved = true
+		gb.undoList = append(gb.undoList, &UndoNode{
+			Type:   UndoInsert, // TODO: save for delete as well
+			Cursor: gb.changeStart,
+			Length: gb.changeLen,
+			Data:   []byte{},
+		})
 	}
+	return nil
+}
+
+func (gb *GapBuffer) SeekToChar(cursor int, char byte, count int) (int, error) {
+	if cursor < 0 || cursor > gb.Len() {
+		return -1, ErrInvalidPosition{errPos: cursor}
+	}
+	if count <= 0 {
+		return -1, fmt.Errorf("count must be greater than 0")
+	}
+	pos := gb.cursorToBufferPos(cursor)
 	for i := pos; i < len(gb.buffer); i++ {
 		if i == gb.gapStart {
 			i = gb.gapEnd
@@ -117,81 +142,76 @@ func (gb *GapBuffer) seekToEndOfLine(pos int) (int, error) {
 				break
 			}
 		}
-		if gb.buffer[i] == '\n' {
-			return i, nil
+		if gb.buffer[i] == char {
+			count--
+			if count == 0 {
+				return i, nil
+			}
 		}
-
 	}
-	return len(gb.buffer), nil
+	return -1, nil
 }
 
-func (gb *GapBuffer) seekToStartOfLine(pos int) (int, error) {
-	if pos < 0 || pos > len(gb.buffer) {
-		return -1, ErrInvalidPosition{errPos: pos}
+func (gb *GapBuffer) ReverseSeekToChar(cursor int, char byte, count int) (int, error) {
+	if cursor < 0 || cursor > gb.Len() {
+		return -1, ErrInvalidPosition{errPos: cursor}
 	}
+	if count <= 0 {
+		return -1, fmt.Errorf("count must be greater than 0")
+	}
+	pos := gb.cursorToBufferPos(cursor)
 	for i := pos; i >= 0; i-- {
-		if gb.buffer[i] == '\n' {
-			return i + 1, nil
-		}
 		if i == gb.gapEnd {
 			i = gb.gapStart
+			if i < 0 {
+				break
+			}
+		}
+		if gb.buffer[i] == char {
+			count--
+			if count == 0 {
+				return i, nil
+			}
 		}
 	}
-	return 0, nil
+	return -1, nil
 }
 
-func (gb *GapBuffer) FindNextLine(cursor int) (int, error) {
-	if cursor < 0 || cursor >= gb.Len() {
-		return -1, ErrInvalidPosition{errPos: cursor}
+func (gb *GapBuffer) Read(cursor int, length int) ([]byte, error) {
+	if cursor < 0 || cursor > gb.Len() {
+		return nil, ErrInvalidPosition{errPos: cursor}
+	}
+	if length < 0 {
+		return nil, fmt.Errorf("length must be greater than 0")
 	}
 	pos := gb.cursorToBufferPos(cursor)
-	endPos, err := gb.seekToEndOfLine(pos)
-	if err != nil {
-		return -1, ErrInvalidPosition{errPos: cursor}
+	contents := make([]byte, 0)
+	for i := pos; i < len(gb.buffer) && len(contents) < length; i++ {
+		if i == gb.gapStart {
+			i = gb.gapEnd
+			if i >= len(gb.buffer) {
+				break
+			}
+		}
+		contents = append(contents, gb.buffer[i])
 	}
-	if endPos == len(gb.buffer) {
-		return gb.Len(), nil
-	}
-	return gb.bufferPosToCursor(endPos + 1), nil
-}
-
-// Returns -1 if the cursor points to the first line
-func (gb *GapBuffer) FindPrevLine(cursor int) (int, error) {
-	if cursor < 0 || cursor >= gb.Len() {
-		return -1, ErrInvalidPosition{errPos: cursor}
-	}
-	pos := gb.cursorToBufferPos(cursor)
-	if (pos == len(gb.buffer) || gb.buffer[pos] == '\n') && pos > 0 {
-		pos -= 1
-	}
-	startPos, err := gb.seekToStartOfLine(pos)
-	if err != nil {
-		return -1, ErrInvalidPosition{errPos: cursor}
-	}
-	return gb.bufferPosToCursor(startPos - 1), nil
-}
-
-func (gb *GapBuffer) ReadTillNewLine(cursor int) (string, error) {
-	if cursor < 0 || cursor >= gb.Len() {
-		return "", ErrInvalidPosition{errPos: cursor}
-	}
-	pos := gb.cursorToBufferPos(cursor)
-	endPos, err := gb.seekToEndOfLine(pos)
-	if err != nil {
-		return "", ErrInvalidPosition{errPos: cursor}
-	}
-	return string(gb.buffer[pos:endPos]), nil
+	return contents, nil
 }
 
 func (gb *GapBuffer) InsertByte(b byte, cursor int) error {
-	if cursor < 0 || cursor > gb.Len()+1 { // +1 because we can insert at the end of the buffer
+	if cursor < 0 || cursor > gb.Len() {
 		return ErrInvalidPosition{errPos: cursor}
 	}
 	if gb.getGapSize() == 0 {
 		gb.resizeBuffer(len(gb.buffer) + 1)
 	}
+	if cursor != gb.changeStart+gb.changeLen {
+		gb.save()
+		gb.changeStart = cursor
+		gb.changeLen = 0
+	}
 	pos := gb.cursorToBufferPos(cursor)
-	if pos < gb.gapStart {
+	if pos <= gb.gapStart {
 		if err := gb.shiftGapStartTo(pos); err != nil {
 			log.Printf("error shifting gap start to %d: %v", pos, err)
 			return ErrInvalidPosition{errPos: cursor}
@@ -204,15 +224,23 @@ func (gb *GapBuffer) InsertByte(b byte, cursor int) error {
 	}
 	gb.buffer[gb.gapStart] = b
 	gb.gapStart += 1
+	gb.changeLen += 1
+	gb.bufSaved = false
+	// If inserted byte is a whitespace or newline, we need to save the buffer
+	if b == ' ' || b == '\n' {
+		gb.save()
+		gb.changeStart = cursor + 1 // Next change will start after the inserted byte
+		gb.changeLen = 0
+	}
 	return nil
 }
 
 func (gb *GapBuffer) DeleteByte(cursor int) error {
-	if cursor < 0 || cursor >= gb.Len() {
+	if cursor < 0 || cursor >= gb.Len() { // TODO: Is this correct?
 		return ErrInvalidPosition{errPos: cursor}
 	}
 	pos := gb.cursorToBufferPos(cursor)
-	if pos < gb.gapStart {
+	if pos <= gb.gapStart {
 		if err := gb.shiftGapStartTo(pos); err != nil {
 			log.Printf("error shifting gap start to %d: %v", pos, err)
 			return ErrInvalidPosition{errPos: cursor}
@@ -229,11 +257,43 @@ func (gb *GapBuffer) DeleteByte(cursor int) error {
 }
 
 func (gb *GapBuffer) GetByte(cursor int) (byte, error) {
-	if cursor < 0 || cursor >= gb.Len() {
+	if cursor < 0 || cursor >= gb.Len() { // TODO: Is this correct?
 		return 0, ErrInvalidPosition{errPos: cursor}
 	}
 	pos := gb.cursorToBufferPos(cursor)
 	return gb.buffer[pos], nil
+}
+
+func (gb *GapBuffer) Undo() (*UndoNode, error) {
+	// TODO: check if undo will be affected by buffer resize (I don't think so)
+	// Save the current state before undoing
+	gb.save()
+	if len(gb.undoList) == 0 {
+		// TODO: if there are no undoes, should we throw an error?
+		return nil, fmt.Errorf("nothing to undo")
+	}
+	lastUndo := gb.undoList[len(gb.undoList)-1]
+	gb.undoList = gb.undoList[:len(gb.undoList)-1]
+	// Delete the bytes of the last undo
+	// First shift the gap so that gap end is at the start of the last undo
+	undoPos := gb.cursorToBufferPos(lastUndo.Cursor) // TODO: check if the UndoNode should contain Cursor or bufferPos
+	if undoPos <= gb.gapStart {
+		if err := gb.shiftGapStartTo(undoPos); err != nil {
+			log.Printf("error shifting gap start to %d: %v", undoPos, err)
+			return nil, ErrInvalidPosition{errPos: undoPos}
+		}
+	} else {
+		if err := gb.shiftGapEndTo(undoPos); err != nil {
+			log.Printf("error shifting gap end to %d: %v", undoPos, err)
+			return nil, ErrInvalidPosition{errPos: undoPos}
+		}
+	}
+	clear(gb.buffer[gb.gapEnd : gb.gapEnd+lastUndo.Length])
+	// TODO: check again for the correctness of the below. What happens if its a undo delete?
+	gb.gapEnd += lastUndo.Length
+	gb.changeStart = lastUndo.Cursor
+	gb.changeLen = 0
+	return lastUndo, nil
 }
 
 func (gb *GapBuffer) Len() int {
@@ -241,5 +301,5 @@ func (gb *GapBuffer) Len() int {
 }
 
 func (gb *GapBuffer) GetInfo() string {
-	return fmt.Sprintf("Buffer: %v\nGap Start: %d\nGap End: %d\nGap Size: %d\n", gb.buffer, gb.gapStart, gb.gapEnd, gb.getGapSize())
+	return fmt.Sprintf("Buffer: %v\nUndo List: %v\nChange Start: %d, Change Len: %d, Buffer saved: %t", gb.buffer, gb.undoList, gb.changeStart, gb.changeLen, gb.bufSaved)
 }
