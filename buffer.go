@@ -7,7 +7,7 @@ type Buffer interface {
 	SeekToChar(cursor int, char byte, count int) (int, error)
 	ReverseSeekToChar(cursor int, char byte, count int) (int, error)
 	Read(cursor int, length int) ([]byte, error)
-	Undo() (*UndoNode, error)
+	Undo() (*ChangeNode, error)
 	DeleteByte(cursor int) error
 	GetByte(cursor int) (byte, error)
 	Len() int
@@ -20,8 +20,7 @@ const (
 	UndoDelete
 )
 
-type UndoNode struct {
-	Type   UndoType
+type ChangeNode struct {
 	Cursor int
 	Length int
 	Data   []byte

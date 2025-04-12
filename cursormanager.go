@@ -48,6 +48,40 @@ func (cm *CursorMgr) getCursor() int {
 	return cursor + min(cm.lines[cm.currentLine], cm.currentColumn)
 }
 
+func (cm *CursorMgr) setToCursor(cursor int) error {
+	if cursor < 0 {
+		return fmt.Errorf("cursor cannot be negative")
+	}
+	column := cursor
+	for i := range cm.lines {
+		if column < cm.lines[i] {
+			cm.currentLine = i
+			cm.currentColumn = column
+			return nil
+		}
+		column -= cm.lines[i]
+	}
+	if column > 0 {
+		return fmt.Errorf("cursor out of bounds")
+	}
+	return nil
+}
+
+func (cm *CursorMgr) insertNewLine() error {
+	cm.lines = append(cm.lines, 0)
+	// If inserting a newline, we need to shift all the lines after the current line
+	if cm.currentLine+1 < len(cm.lines) {
+		copy(cm.lines[cm.currentLine+2:], cm.lines[cm.currentLine+1:])
+	}
+	// Break length of current line and add it to the next line
+	cm.lines[cm.currentLine+1] = cm.lines[cm.currentLine] - cm.currentColumn
+	cm.lines[cm.currentLine] = cm.currentColumn
+	// Position the cursor at the start of the next line
+	cm.currentLine++
+	cm.currentColumn = 0
+	return nil
+}
+
 func (cm *CursorMgr) MoveCursorRight() {
 	if cm.currentLine == len(cm.lines)-1 && cm.currentColumn == cm.lines[cm.currentLine] {
 		return
@@ -108,17 +142,10 @@ func (cm *CursorMgr) InsertAtCursor(b byte, buffer Buffer) {
 	cm.currentColumn += 1
 	cm.lines[cm.currentLine] += 1
 	if b == '\n' {
-		cm.lines = append(cm.lines, 0)
-		// If inserting a newline, we need to shift all the lines after the current line
-		if cm.currentLine+1 < len(cm.lines) {
-			copy(cm.lines[cm.currentLine+2:], cm.lines[cm.currentLine+1:])
+		err := cm.insertNewLine()
+		if err != nil {
+			log.Fatalf("error inserting new line: %v", err)
 		}
-		// Break length of current line and add it to the next line
-		cm.lines[cm.currentLine+1] = cm.lines[cm.currentLine] - cm.currentColumn
-		cm.lines[cm.currentLine] = cm.currentColumn
-		// Position the cursor at the start of the next line
-		cm.currentLine++
-		cm.currentColumn = 0
 	}
 }
 
@@ -156,16 +183,11 @@ func (cm *CursorMgr) Undo(buffer Buffer) {
 	if err != nil {
 		log.Fatalf("error undoing: %v", err)
 	}
-	if lastUndo.Type == UndoInsert {
+	if len(lastUndo.Data) == 0 {
 		// Reset the current line and column to the last undo cursor
-		column := lastUndo.Cursor
-		for i := range cm.lines {
-			if column < cm.lines[i] {
-				cm.currentLine = i
-				cm.currentColumn = column
-				break
-			}
-			column -= cm.lines[i]
+		err := cm.setToCursor(lastUndo.Cursor)
+		if err != nil {
+			log.Fatalf("error setting cursor: %v", err)
 		}
 		// Calculate the number of lines to shift due to the undo
 		linesToShift := 0
@@ -192,6 +214,24 @@ func (cm *CursorMgr) Undo(buffer Buffer) {
 			cm.lines = cm.lines[:len(cm.lines)-linesToShift]
 		}
 		cm.lines[cm.currentLine] -= lastUndo.Length
+	} else {
+		// Reset the current line and column to the last undo cursor
+		err := cm.setToCursor(lastUndo.Cursor - lastUndo.Length + 1)
+		if err != nil {
+			log.Fatalf("error setting cursor: %v", err)
+		}
+		// Reshift the lines
+		// Iterate in reverse order since lastUndo.Data is reversed
+		for i := len(lastUndo.Data) - 1; i >= 0; i-- {
+			cm.lines[cm.currentLine] += 1
+			cm.currentColumn += 1
+			if lastUndo.Data[i] == '\n' {
+				err := cm.insertNewLine()
+				if err != nil {
+					log.Fatalf("error inserting new line: %v", err)
+				}
+			}
+		}
 	}
 }
 
