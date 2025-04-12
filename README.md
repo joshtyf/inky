@@ -2,6 +2,12 @@
 
 ## Progress
 
+### 12/04/2025
+
+Had a busy week and was absent for a while. But finally finished implementing undo delete. Made some refactorings and improvements to the code. However, I'm very sure that there are still bugs. The next immediate step is to add tests. Then, probably work on improving the "UI" of the editor as well as better error handling.
+
+Afterwards, I would have a pretty basic text editor. Improvements to it would include a more efficient buffer, text formatting support, UTF8 support.
+
 ### 03/04/2025
 
 Updated the undo functionality to delete the last typed word instead of a single character. I am currently tracking the changes using a `changeStart` and `changeLen` variable. Undoes are stored whenever there's a new whitespace or newline. Recalculating the cursor and indices was really difficult and I'm pretty sure my code is still imperfect (there's probably an edge case that I'm not accounting for).
