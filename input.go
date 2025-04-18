@@ -2,43 +2,42 @@ package main
 
 import "context"
 
-type SpecialKey int
+var defaultMapping = map[string]Key{
+	// Arrow Keys
+	"\x1b[A": {Code: ArrowUp},
+	"\x1b[B": {Code: ArrowDown},
+	"\x1b[D": {Code: ArrowLeft},
+	"\x1b[C": {Code: ArrowRight},
 
-const (
-	ArrowUp SpecialKey = iota
-	ArrowDown
-	ArrowLeft
-	ArrowRight
-	Delete
-	NewLine
-	Undo
-)
+	// Control Keys
+	"\x04": {Code: CtrlD},
+	"\x7f": {Code: Backspace},
+	"\x1f": {Code: Undo},
+	"\x0a": {Code: Newline},
+}
 
 var DEFAULT_INPUT = NewTerminalInput()
 
 type Input interface {
-	transmit(charOut chan<- byte, keyOut chan<- SpecialKey)
+	listen(keyOut chan<- Key)
 }
 
 type inputCtx struct {
 	context.Context
 
-	charOut <-chan byte
-	keyOut  <-chan SpecialKey
+	inputCh <-chan Key
 }
 
 func startInput(i Input) inputCtx {
-	charOut := make(chan byte)
-	keyOut := make(chan SpecialKey)
+	inputCh := make(chan Key)
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
-		i.transmit(charOut, keyOut)
+		i.listen(inputCh)
 		cancel()
 	}()
 
 	return inputCtx{
 		Context: ctx,
-		charOut: charOut,
-		keyOut:  keyOut,
+		inputCh: inputCh,
 	}
 }

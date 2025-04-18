@@ -32,10 +32,15 @@ func main() {
 		case <-inputCtx.Done():
 			log.Println("Closing text editor")
 			return
-		case input := <-inputCtx.charOut:
-			cm.InsertAtCursor(input, buf)
-		case input := <-inputCtx.keyOut:
-			switch input {
+		case k := <-inputCtx.inputCh:
+			switch k.Code {
+			case RuneKey:
+				for _, r := range k.Runes {
+					data := []byte(string(r))
+					for i := range data {
+						cm.InsertAtCursor(data[i], buf)
+					}
+				}
 			case ArrowUp:
 				cm.MoveCursorUp()
 			case ArrowDown:
@@ -44,9 +49,9 @@ func main() {
 				cm.MoveCursorLeft()
 			case ArrowRight:
 				cm.MoveCursorRight()
-			case NewLine:
+			case Newline:
 				cm.InsertAtCursor('\n', buf)
-			case Delete:
+			case Backspace:
 				cm.BackspaceAtCursor(buf)
 			case Undo:
 				cm.Undo(buf)

@@ -3,18 +3,25 @@ package main
 import (
 	"log"
 	"os"
+	"unicode/utf8"
 
 	"golang.org/x/sys/unix"
 )
 
+const DEFAULT_BUFFER_READ_SIZE = 256
+
 type TerminalInput struct {
+	mapping map[string]Key
 }
 
 func NewTerminalInput() *TerminalInput {
-	return &TerminalInput{}
+	// TODO: allow for custom sequences
+	return &TerminalInput{
+		mapping: defaultMapping,
+	}
 }
 
-func (ti *TerminalInput) transmit(charOut chan<- byte, keyOut chan<- SpecialKey) {
+func (ti *TerminalInput) listen(keyOut chan<- Key) {
 	// TODO: Make it cross-platform
 	termios, err := unix.IoctlGetTermios(int(os.Stdin.Fd()), unix.TIOCGETA)
 	if err != nil {
@@ -49,43 +56,36 @@ func (ti *TerminalInput) transmit(charOut chan<- byte, keyOut chan<- SpecialKey)
 	}()
 	// Read from stdin
 	for {
-		var b [3]byte
+		var b [DEFAULT_BUFFER_READ_SIZE]byte
 		n, err := os.Stdin.Read(b[:])
 		if err != nil {
 			log.Printf("error reading from stdin: %v", err)
 			return
 		}
-		// TODO: Implement a separate key mapper. Refer to https://github.com/atomicgo/keyboard
-		if n == 1 {
-			switch b[0] {
-			case 4: // Ctrl-D
+
+		if k, ok := ti.mapping[string(b[:n])]; ok {
+			// TODO: remove this once the 'view' settings have been refactored out
+			if k.Code == CtrlD {
 				log.Println("Received stop signal, exiting")
 				return
-			case 10:
-				keyOut <- NewLine
-			case 31: // Currently customied for cmd+z in VSCode
-				// TODO: read a user config file to get the key mapping
-				keyOut <- Undo
-			case 127:
-				keyOut <- Delete
-			default:
-				charOut <- b[0]
 			}
-		} else if n == 3 && b[0] == 0x1b {
-			switch b[2] {
-			case 'A':
-				keyOut <- ArrowUp
-			case 'B':
-				keyOut <- ArrowDown
-			case 'C':
-				keyOut <- ArrowRight
-			case 'D':
-				keyOut <- ArrowLeft
-			default:
-				log.Printf("Received unexpected input: %v", b[:n])
+			keyOut <- k
+			continue
+		}
+
+		runes := make([]rune, 0)
+		for i := 0; i < n; i++ {
+			r, width := utf8.DecodeRune(b[i:])
+			if r == utf8.RuneError {
+				log.Fatalf("error decoding rune: %v", b)
 			}
-		} else {
-			log.Printf("Received unexpected input: %v", b[:n])
+			runes = append(runes, r)
+			i += width - 1
+		}
+
+		if len(runes) > 0 {
+			keyOut <- Key{Code: RuneKey, Runes: runes}
+			continue
 		}
 	}
 }
