@@ -1,6 +1,9 @@
 package main
 
-import "context"
+import (
+	"context"
+	"log"
+)
 
 var defaultMapping = map[string]Key{
 	// Arrow Keys
@@ -16,28 +19,44 @@ var defaultMapping = map[string]Key{
 	"\x0a": {Code: Newline},
 }
 
-var DEFAULT_INPUT = NewTerminalInput()
-
 type Input interface {
-	listen(keyOut chan<- Key)
+	start() error
+	listen() (*Key, error)
+	stop() error
 }
 
 type inputCtx struct {
 	context.Context
 
-	inputCh <-chan Key
+	inputCh <-chan *Key
 }
 
-func startInput(i Input) inputCtx {
-	inputCh := make(chan Key)
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		i.listen(inputCh)
-		cancel()
-	}()
-
-	return inputCtx{
+func startAndListen(i Input) (ret inputCtx) {
+	inputCh := make(chan *Key)
+	ctx, cancel := context.WithCancelCause(context.Background())
+	ret = inputCtx{
 		Context: ctx,
 		inputCh: inputCh,
 	}
+
+	err := i.start()
+	if err != nil {
+		log.Printf("error starting input: %v", err)
+		cancel(err)
+	}
+
+	go func() {
+		for {
+			k, err := i.listen()
+			if err != nil || k.Code == CtrlD {
+				cancel(err)
+				close(inputCh)
+				return
+			} else {
+				inputCh <- k
+			}
+		}
+
+	}()
+	return
 }

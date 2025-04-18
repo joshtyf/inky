@@ -5,41 +5,17 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-
-	"golang.org/x/sys/unix"
 )
 
 func main() {
 	// Remove all log prefix
 	log.SetFlags(0)
-
-	// TODO: Refactor the 'view' settings out of the main function
-	// TODO: Make it cross-platform
-	termios, err := unix.IoctlGetTermios(int(os.Stdin.Fd()), unix.TIOCGETA)
-	if err != nil {
-		log.Fatalf("error getting terminal attributes: %v", err)
-		return
-	}
-	termios.Lflag &^= unix.ICANON | unix.ECHO
-	err = unix.IoctlSetTermios(int(os.Stdin.Fd()), unix.TIOCSETA, termios)
-	if err != nil {
-		log.Fatalf("error setting terminal attributes: %v", err)
-		return
-	}
 	// Hide cursor
-	_, err = os.Stdout.WriteString("\033[?25l")
+	_, err := os.Stdout.WriteString("\033[?25l")
 	if err != nil {
-		log.Printf("error hiding cursor: %v", err)
-		return
+		log.Fatalf("error hiding cursor: %v", err)
 	}
-
 	defer func() {
-		log.Println("Restoring terminal attributes")
-		termios.Lflag |= unix.ICANON | unix.ECHO
-		err := unix.IoctlSetTermios(int(os.Stdin.Fd()), unix.TIOCSETA, termios)
-		if err != nil {
-			log.Fatalf("error resetting terminal attributes: %v", err)
-		}
 		// Show cursor
 		_, err = os.Stdout.WriteString("\033[?25h")
 		if err != nil {
@@ -58,15 +34,18 @@ func main() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	// Set up input channels
-	inputCtx := startInput(DEFAULT_INPUT)
+	input := NewTerminalInput()
+	inputCtx := startAndListen(input)
 
 	for {
 		select {
 		case <-sigChan:
 			log.Println("Aborting text editor")
+			input.stop()
 			return
 		case <-inputCtx.Done():
 			log.Println("Closing text editor")
+			input.stop()
 			return
 		case k := <-inputCtx.inputCh:
 			switch k.Code {
