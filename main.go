@@ -7,15 +7,6 @@ import (
 	"syscall"
 )
 
-func startInput(i Input) (<-chan byte, <-chan SpecialKey) {
-	charOut := make(chan byte)
-	keyOut := make(chan SpecialKey)
-
-	go i.transmit(charOut, keyOut)
-
-	return charOut, keyOut
-}
-
 func main() {
 	// Remove all log prefix
 	log.SetFlags(0)
@@ -31,16 +22,19 @@ func main() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	// Set up input channels
-	charInput, keyInput := startInput(DEFAULT_INPUT)
+	inputCtx := startInput(DEFAULT_INPUT)
 
 	for {
 		select {
 		case <-sigChan:
-			log.Println("Received signal, exiting")
+			log.Println("Aborting text editor")
 			return
-		case input := <-charInput:
+		case <-inputCtx.Done():
+			log.Println("Closing text editor")
+			return
+		case input := <-inputCtx.charOut:
 			cm.InsertAtCursor(input, buf)
-		case input := <-keyInput:
+		case input := <-inputCtx.keyOut:
 			switch input {
 			case ArrowUp:
 				cm.MoveCursorUp()
