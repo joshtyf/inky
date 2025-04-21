@@ -2,6 +2,14 @@
 
 ## Progress
 
+### 22/04/2025
+
+So many changes since the last update. It all started out with simply hiding the terminal cursor. But I encountered a problem with my cursor not showing after the entire program exits. Turns out, my deferred function to show the cursor was not being called.
+
+Solving the issue involved refactoring my code and gave me a chance to separate both the output and input. While learning how to design a better code for the setup and teardown of the input listener, I stumbled upon this library [`https://github.com/atomicgo/keyboard`](https://github.com/atomicgo/keyboard) and learned how to handle keypresses better -- also supports utf8!
+
+But now my text editor works and has a decent view. I would like to extract my the "view" code into a separate component, but I'm still thinking on what's the best way to do that. My long term goal is to support multiple views e.g. browser, terminal, etc. An API to fetch the data to populate the view should be a good start.
+
 ### 12/04/2025
 
 Had a busy week and was absent for a while. But finally finished implementing undo delete. Made some refactorings and improvements to the code. However, I'm very sure that there are still bugs. The next immediate step is to add tests. Then, probably work on improving the "UI" of the editor as well as better error handling.

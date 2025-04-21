@@ -1,10 +1,13 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
+
+	"golang.org/x/term"
 )
 
 func main() {
@@ -37,6 +40,8 @@ func main() {
 	input := NewTerminalInput()
 	inputCtx := startAndListen(input)
 
+	top := 0
+
 	for {
 		select {
 		case <-sigChan:
@@ -58,8 +63,10 @@ func main() {
 				}
 			case ArrowUp:
 				cm.MoveCursorUp()
+				// TODO: Update top line
 			case ArrowDown:
 				cm.MoveCursorDown()
+				// TODO: Update top line
 			case ArrowLeft:
 				cm.MoveCursorLeft()
 			case ArrowRight:
@@ -74,8 +81,20 @@ func main() {
 		}
 		// log.Print(buf.GetInfo())
 		log.Printf("%s%s", cursorHome, clearScreen)
-		log.Print(cm.GetInfo())
-		log.Print(buf.GetInfo())
-		log.Print(cm.ReturnLine(buf))
+		// log.Print(cm.GetInfo())
+		// log.Print(buf.GetInfo())
+		_, h, err := term.GetSize(int(os.Stdout.Fd()))
+		if err != nil {
+			log.Fatalf("error getting terminal size: %v", err)
+		}
+		content, err := cm.ReadLines(top, h-1, buf)
+		if err != nil {
+			log.Fatalf("error reading lines: %v", err)
+		}
+		for i := range content {
+			log.Printf("[%s]", content[i])
+		}
+		// Status line
+		fmt.Print("~end~")
 	}
 }

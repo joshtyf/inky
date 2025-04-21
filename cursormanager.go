@@ -48,6 +48,14 @@ func (cm *CursorMgr) getCursor() int {
 	return cursor + min(cm.lines[cm.currentLine], cm.currentColumn)
 }
 
+func (cm *CursorMgr) getLineCursorStart() int {
+	cursor := 0
+	for i := range cm.currentLine {
+		cursor += cm.lines[i]
+	}
+	return cursor
+}
+
 func (cm *CursorMgr) setToCursor(cursor int) error {
 	if cursor < 0 {
 		return fmt.Errorf("cursor cannot be negative")
@@ -131,6 +139,31 @@ func (cm *CursorMgr) ReturnLine(buffer Buffer) string {
 		log.Fatalf("error reading till new line: %v", err)
 	}
 	return string(content)
+}
+
+func (cm *CursorMgr) ReadLines(start, n int, buffer Buffer) ([]string, error) {
+	cursor := 0
+	for i := range start {
+		cursor += cm.lines[i]
+	}
+	content := make([]string, n)
+	for i := 0; i < n && cursor < buffer.Len(); i++ {
+		nextLine, err := buffer.SeekToChar(cursor, '\n', 1)
+		if err != nil {
+			log.Fatalf("error seeking to char: %v", err)
+		}
+		if nextLine == -1 {
+			nextLine = buffer.Len()
+		}
+		data, err := buffer.Read(cursor, nextLine-cursor)
+		if err != nil {
+			log.Fatalf("error reading till new line: %v", err)
+		}
+		content[i] = string(data)
+		cursor = nextLine + 1
+	}
+
+	return content, nil
 }
 
 func (cm *CursorMgr) InsertAtCursor(b byte, buffer Buffer) {
