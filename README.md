@@ -2,6 +2,14 @@
 
 ## Progress
 
+### 25/04/2025
+
+Major refactoring day. Moved the core editor code into a `core` package and kept the UI or view in a separate `output` package. The bridge between the two would be the `EditorState` struct that contains the necessary information/functions to update the view.
+
+Now, my output has simple cursor highlight and will be redrawn on editor updates.
+
+I would like to improve the view by adding a status bar next.
+
 ### 22/04/2025
 
 So many changes since the last update. It all started out with simply hiding the terminal cursor. But I encountered a problem with my cursor not showing after the entire program exits. Turns out, my deferred function to show the cursor was not being called.
