@@ -1,4 +1,4 @@
-package main
+package output
 
 const (
 	clearScreen = "\033[2J"
