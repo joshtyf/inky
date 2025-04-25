@@ -1,9 +1,6 @@
 package core
 
-import (
-	"context"
-	"log"
-)
+import "context"
 
 var defaultMapping = map[string]Key{
 	// Arrow Keys
@@ -19,44 +16,6 @@ var defaultMapping = map[string]Key{
 	"\x0a": {Code: Newline},
 }
 
-type Input interface {
-	start() error
-	listen() (*Key, error)
-	stop() error
-}
-
-type inputCtx struct {
-	context.Context
-
-	inputCh <-chan *Key
-}
-
-func startAndListen(i Input) (ret inputCtx) {
-	inputCh := make(chan *Key)
-	ctx, cancel := context.WithCancelCause(context.Background())
-	ret = inputCtx{
-		Context: ctx,
-		inputCh: inputCh,
-	}
-
-	err := i.start()
-	if err != nil {
-		log.Printf("error starting input: %v", err)
-		cancel(err)
-	}
-
-	go func() {
-		for {
-			k, err := i.listen()
-			if err != nil || k.Code == CtrlD {
-				cancel(err)
-				close(inputCh)
-				return
-			} else {
-				inputCh <- k
-			}
-		}
-
-	}()
-	return
+type input interface {
+	start(context.Context, context.CancelCauseFunc, chan<- *Key) error
 }

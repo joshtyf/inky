@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"errors"
 	"log"
 	"os"
@@ -22,7 +23,24 @@ func NewTerminalInput() *TerminalInput {
 	}
 }
 
-func (ti *TerminalInput) start() error {
+func (ti *TerminalInput) start(ctx context.Context, cancelInput context.CancelCauseFunc, inputCh chan<- *Key) error {
+	ti.setup()
+	defer ti.teardown()
+
+	go func() {
+		for {
+			k, err := ti.listen()
+			if err != nil {
+				cancelInput(err)
+			}
+			inputCh <- k
+		}
+	}()
+	<-ctx.Done()
+	return nil
+}
+
+func (ti *TerminalInput) setup() error {
 	// TODO: Make it cross-platform
 	termios, err := unix.IoctlGetTermios(int(os.Stdin.Fd()), unix.TIOCGETA)
 	if err != nil {
@@ -35,11 +53,10 @@ func (ti *TerminalInput) start() error {
 		log.Println("error setting terminal attributes")
 		return err
 	}
-
 	return nil
 }
 
-func (ti *TerminalInput) stop() error {
+func (ti *TerminalInput) teardown() error {
 	log.Println("stopping input")
 	termios, err := unix.IoctlGetTermios(int(os.Stdin.Fd()), unix.TIOCGETA)
 	if err != nil {

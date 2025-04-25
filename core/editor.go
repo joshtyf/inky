@@ -36,26 +36,30 @@ func (e *Editor) RegisterListener(ch chan<- *EditorState) {
 	e.listeners = append(e.listeners, ch)
 }
 
-func (e *Editor) Start(ctx context.Context) error {
-	// Set up input channels
+func (e *Editor) Start(ctx context.Context, input input) error {
 	log.Println("Starting text editor")
-	input := NewTerminalInput()
-	inputCtx := startAndListen(input)
+	inputCh := make(chan *Key)
+	inputCtx, cancelInput := context.WithCancelCause(ctx)
+	go input.start(inputCtx, cancelInput, inputCh)
 
 	for {
 		select {
 		case <-ctx.Done():
 			log.Println("Aborting text editor")
-			input.stop()
+			cancelInput(nil)
 			e.close()
 			return nil
 		case <-inputCtx.Done():
-			log.Println("Closing text editor")
-			input.stop()
+			log.Println("Input Cancelled: ", context.Cause(inputCtx))
 			e.close()
 			return nil
-		case k := <-inputCtx.inputCh:
+		case k := <-inputCh:
 			switch k.Code {
+			case CtrlD:
+				log.Println("Ctrl+D pressed")
+				cancelInput(nil)
+				e.close()
+				return nil
 			case RuneKey:
 				for _, r := range k.Runes {
 					data := []byte(string(r))
