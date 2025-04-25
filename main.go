@@ -23,5 +23,5 @@ func main() {
 		log.Fatalf("error starting editor: %v", err)
 	}
 	// TODO: implement wait for proper shutdown
-	time.Sleep(time.Second * 5)
+	time.Sleep(time.Second * 2)
 }

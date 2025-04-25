@@ -9,7 +9,9 @@ import (
 type ReadEditorLines func(start int, n int) ([]string, error)
 
 type EditorState struct {
-	Cursor int
+	KeyPressed    *Key
+	CurrentLine   int
+	CurrentColumn int
 	ReadEditorLines
 }
 
@@ -69,10 +71,8 @@ func (e *Editor) Start(ctx context.Context, input input) error {
 				}
 			case ArrowUp:
 				e.moveCursorUp()
-				// TODO: Update top line
 			case ArrowDown:
 				e.moveCursorDown()
-				// TODO: Update top line
 			case ArrowLeft:
 				e.moveCursorLeft()
 			case ArrowRight:
@@ -84,13 +84,16 @@ func (e *Editor) Start(ctx context.Context, input input) error {
 			case Undo:
 				e.undo()
 			}
+			e.notifyListeners(
+				&EditorState{
+					KeyPressed:      k,
+					CurrentLine:     e.currentLine,
+					CurrentColumn:   e.currentColumn,
+					ReadEditorLines: e.readLines,
+				},
+			)
 		}
-		e.notifyListeners(
-			&EditorState{
-				Cursor:          e.getCursor(),
-				ReadEditorLines: e.readLines,
-			},
-		)
+
 	}
 }
 

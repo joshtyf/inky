@@ -38,21 +38,41 @@ func (ot *OutputTerminal) Listen(e *core.Editor) {
 
 	for editorState := range ot.editorStateUpdates {
 		log.Printf("%s%s", cursorHome, clearScreen)
-		// log.Print(cm.GetInfo())
-		// log.Print(buf.GetInfo())
 		_, h, err := term.GetSize(int(os.Stdout.Fd()))
 		if err != nil {
 			log.Fatalf("error getting terminal size: %v", err)
 		}
-		content, err := editorState.ReadEditorLines(ot.top, h-1)
+		if editorState.CurrentLine < ot.top {
+			ot.top = editorState.CurrentLine
+		} else if editorState.CurrentLine >= ot.top+h-1 {
+			ot.top = editorState.CurrentLine - h + 2
+		}
+		content, err := editorState.ReadEditorLines(ot.top, h-1) // Last line reserved for status line
 		if err != nil {
 			log.Fatalf("error reading lines: %v", err)
 		}
 		for i := range content {
+			// TODO: beautify this code
+			// Add highlight to the current column current line
+			if i == editorState.CurrentLine-ot.top {
+				fmt.Printf("[%s", content[i][:editorState.CurrentColumn])
+				if editorState.CurrentColumn < len(content[i]) {
+					// Highlight the current character
+					fmt.Printf("%s%s%s", highlightStart, string(content[i][editorState.CurrentColumn]), highlightEnd)
+				} else {
+					fmt.Printf("%s %s", highlightStart, highlightEnd)
+				}
+				if editorState.CurrentColumn+1 < len(content[i]) {
+					fmt.Printf("%s", content[i][editorState.CurrentColumn+1:])
+				}
+				log.Println("]")
+				continue
+			}
 			log.Printf("[%s]", content[i])
 		}
 		// Status line
 		fmt.Print("~end~")
 	}
+	log.Printf("%s%s", cursorHome, clearScreen)
 	log.Println("Closing output terminal")
 }
