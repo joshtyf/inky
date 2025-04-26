@@ -2,8 +2,10 @@ package core
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"log"
+
+	editorLog "github.com/joshtyf/texteditor/log"
 )
 
 type ReadEditorLines func(start int, n int) ([]string, error)
@@ -13,6 +15,7 @@ type EditorState struct {
 	CurrentLine   int
 	CurrentColumn int
 	ReadEditorLines
+	Error error
 }
 
 type Editor struct {
@@ -21,6 +24,7 @@ type Editor struct {
 	currentColumn int
 	buf           Buffer
 	listeners     []chan<- *EditorState
+	logger        *log.Logger
 }
 
 func NewEditor(buf Buffer) *Editor {
@@ -31,6 +35,7 @@ func NewEditor(buf Buffer) *Editor {
 		currentColumn: 0,
 		buf:           buf,
 		listeners:     make([]chan<- *EditorState, 0),
+		logger:        editorLog.CreateLogger("editor"),
 	}
 }
 
@@ -39,34 +44,39 @@ func (e *Editor) RegisterListener(ch chan<- *EditorState) {
 }
 
 func (e *Editor) Start(ctx context.Context, input input) error {
-	log.Println("Starting text editor")
+	e.logger.Println("starting")
 	inputCh := make(chan *Key)
 	inputCtx, cancelInput := context.WithCancelCause(ctx)
 	go input.start(inputCtx, cancelInput, inputCh)
-
+	defer func() {
+		e.close()
+		cancelInput(nil)
+	}()
 	for {
+		var err error = nil
 		select {
 		case <-ctx.Done():
-			log.Println("Aborting text editor")
-			cancelInput(nil)
-			e.close()
-			return nil
+			e.logger.Println("context stopped")
+			return ErrEditorQuit{}
 		case <-inputCtx.Done():
-			log.Println("Input Cancelled: ", context.Cause(inputCtx))
-			e.close()
-			return nil
+			e.logger.Printf("input cancelled: %s", context.Cause(inputCtx))
+			return ErrEditorInternal{
+				message: context.Cause(inputCtx).Error(),
+			}
 		case k := <-inputCh:
 			switch k.Code {
 			case CtrlD:
-				log.Println("Ctrl+D pressed")
-				cancelInput(nil)
-				e.close()
-				return nil
+				e.logger.Println("Ctrl+D pressed")
+				return ErrEditorQuit{}
 			case RuneKey:
 				for _, r := range k.Runes {
 					data := []byte(string(r))
 					for i := range data {
-						e.insertAtCursor(data[i])
+						err = e.insertAtCursor(data[i])
+						if err != nil {
+							e.logger.Println("error encountered while inserting sequence of runes")
+							break
+						}
 					}
 				}
 			case ArrowUp:
@@ -78,11 +88,15 @@ func (e *Editor) Start(ctx context.Context, input input) error {
 			case ArrowRight:
 				e.moveCursorRight()
 			case Newline:
-				e.insertAtCursor('\n')
+				err = e.insertAtCursor('\n')
 			case Backspace:
-				e.backspaceAtCursor()
+				_, err = e.backspaceAtCursor()
 			case Undo:
-				e.undo()
+				err = e.undo()
+			}
+			if coreError, ok := err.(CoreError); ok && coreError.GetSeverity() == CoreErrorSeverityFatal {
+				cancelInput(errors.New("unexpected fatal error encountered"))
+				return coreError
 			}
 			e.notifyListeners(
 				&EditorState{
@@ -90,6 +104,7 @@ func (e *Editor) Start(ctx context.Context, input input) error {
 					CurrentLine:     e.currentLine,
 					CurrentColumn:   e.currentColumn,
 					ReadEditorLines: e.readLines,
+					Error:           err,
 				},
 			)
 		}
@@ -116,9 +131,12 @@ func (e *Editor) getCursor() int {
 	}
 	return cursor + min(e.lines[e.currentLine], e.currentColumn)
 }
+
 func (e *Editor) setToCursor(cursor int) error {
 	if cursor < 0 {
-		return fmt.Errorf("cursor cannot be negative")
+		return ErrEditorInternal{
+			message: "received negative cursor input when setting cursor",
+		}
 	}
 	column := cursor
 	for i := range e.lines {
@@ -130,7 +148,9 @@ func (e *Editor) setToCursor(cursor int) error {
 		column -= e.lines[i]
 	}
 	if column > 0 {
-		return fmt.Errorf("cursor out of bounds")
+		return ErrEditorInternal{
+			message: "received out of bounds cursor input when setting cursor",
+		}
 	}
 	return nil
 }
@@ -149,64 +169,84 @@ func (e *Editor) insertNewLine() error {
 	return nil
 }
 
-func (e *Editor) insertAtCursor(b byte) {
+func (e *Editor) insertAtCursor(b byte) error {
+	// TODO: change to insert rune?
 	cursor := e.getCursor()
 	err := e.buf.InsertByte(b, cursor)
 	if err != nil {
-		log.Fatalf("error inserting rune: %v", err)
+		e.logger.Printf("error inserting byte into buffer: %s", err)
+		return ErrEditorInsert{
+			severity: CoreErrorSeverityError,
+		}
 	}
 	e.currentColumn += 1
 	e.lines[e.currentLine] += 1
 	if b == '\n' {
 		err := e.insertNewLine()
 		if err != nil {
-			log.Fatalf("error inserting new line: %v", err)
+			e.logger.Printf("error updating lines on newline insert: %s", err)
+			return ErrEditorInsert{
+				severity: CoreErrorSeverityError,
+			}
 		}
 	}
+	return nil
 }
-func (e *Editor) moveCursorRight() {
+
+func (e *Editor) moveCursorRight() error {
 	if e.currentLine == len(e.lines)-1 && e.currentColumn == e.lines[e.currentLine] {
-		return
+		return nil
 	}
 	e.currentColumn++
 	if e.currentColumn >= e.lines[e.currentLine] && e.currentLine < len(e.lines)-1 {
 		e.currentColumn = 0
 		e.currentLine++
 	}
+	return nil
 }
 
-func (e *Editor) moveCursorLeft() {
+func (e *Editor) moveCursorLeft() error {
 	if e.currentLine == 0 && e.currentColumn == 0 {
-		return
+		return nil
 	}
 	e.currentColumn--
 	if e.currentColumn < 0 && e.currentLine > 0 {
 		e.currentLine--
 		e.currentColumn = e.lines[e.currentLine] - 1
 	}
+	return nil
 }
 
-func (e *Editor) moveCursorUp() {
+func (e *Editor) moveCursorUp() error {
 	e.currentLine = max(e.currentLine-1, 0)
 	e.currentColumn = min(e.currentColumn, e.lines[e.currentLine]-1)
+	return nil
 }
 
-func (e *Editor) moveCursorDown() {
+func (e *Editor) moveCursorDown() error {
 	e.currentLine = min(e.currentLine+1, len(e.lines)-1)
 	e.currentColumn = min(e.currentColumn, e.lines[e.currentLine])
+	return nil
 }
-func (e *Editor) backspaceAtCursor() byte {
+
+func (e *Editor) backspaceAtCursor() (byte, error) {
 	cursor := e.getCursor()
 	if cursor == 0 {
-		return 0
+		return 0, nil
 	}
 	toDelete, err := e.buf.GetByte(cursor - 1)
 	if err != nil {
-		log.Fatalf("error getting byte: %v", err)
+		e.logger.Printf("error getting byte to be deleted: %s", err)
+		return 0, ErrEditorDelete{
+			severity: CoreErrorSeverityError,
+		}
 	}
 	err = e.buf.DeleteByte(cursor - 1)
 	if err != nil {
-		log.Fatalf("error deleting byte: %v", err)
+		e.logger.Printf("error deleting byte from buffer: %s", err)
+		return 0, ErrEditorDelete{
+			severity: CoreErrorSeverityError,
+		}
 	}
 
 	if e.currentColumn == 0 {
@@ -218,22 +258,30 @@ func (e *Editor) backspaceAtCursor() byte {
 	}
 	e.currentColumn--
 	e.lines[e.currentLine] -= 1
-	return toDelete
+	return toDelete, nil
 }
 
-func (e *Editor) undo() {
+func (e *Editor) undo() error {
 	// TODO: Implement undo functionality
 	// Need to update current cursor, current line and current column
 	// Need to update lines
 	lastUndo, err := e.buf.Undo()
 	if err != nil {
-		log.Fatalf("error undoing: %v", err)
+		e.logger.Printf("error undoing last change in buffer: %s", err)
+		return ErrEditorUndo{
+			severity: CoreErrorSeverityError,
+		}
+	}
+	if lastUndo == nil {
+		e.logger.Println("no changes to undo")
+		return nil
 	}
 	if len(lastUndo.Data) == 0 {
 		// Reset the current line and column to the last undo cursor
 		err := e.setToCursor(lastUndo.Cursor)
 		if err != nil {
-			log.Fatalf("error setting cursor: %v", err)
+			e.logger.Println("error setting cursor to last insert change")
+			return err
 		}
 		// Calculate the number of lines to shift due to the undo
 		linesToShift := 0
@@ -264,7 +312,8 @@ func (e *Editor) undo() {
 		// Reset the current line and column to the last undo cursor
 		err := e.setToCursor(lastUndo.Cursor - lastUndo.Length + 1)
 		if err != nil {
-			log.Fatalf("error setting cursor: %v", err)
+			e.logger.Println("error setting cursor to last delete change")
+			return err
 		}
 		// Reshift the lines
 		// Iterate in reverse order since lastUndo.Data is reversed
@@ -274,12 +323,15 @@ func (e *Editor) undo() {
 			if lastUndo.Data[i] == '\n' {
 				err := e.insertNewLine()
 				if err != nil {
-					log.Fatalf("error inserting new line: %v", err)
+					e.logger.Printf("error re-inserting newline during undo operation: %s", err)
+					return err
 				}
 			}
 		}
 	}
+	return nil
 }
+
 func (e *Editor) readLines(start, n int) ([]string, error) {
 	cursor := 0
 	for i := range start {
@@ -289,18 +341,94 @@ func (e *Editor) readLines(start, n int) ([]string, error) {
 	for i := 0; i < n && cursor < e.buf.Len(); i++ {
 		nextLine, err := e.buf.SeekToChar(cursor, '\n', 1)
 		if err != nil {
-			log.Fatalf("error seeking to char: %v", err)
+			e.logger.Printf("error seeking next line index: %s", err)
+			return nil, ErrEditorRead{
+				severity: CoreErrorSeverityError,
+			}
 		}
 		if nextLine == -1 {
 			nextLine = e.buf.Len()
 		}
 		data, err := e.buf.Read(cursor, nextLine-cursor)
 		if err != nil {
-			log.Fatalf("error reading till new line: %v", err)
+			e.logger.Printf("error reading till next line: %s", err)
+			return nil, ErrEditorRead{
+				severity: CoreErrorSeverityError,
+			}
 		}
 		content[i] = string(data)
 		cursor = nextLine + 1
 	}
 
 	return content, nil
+}
+
+/*
+ * Errors
+ */
+
+type ErrEditorInsert struct {
+	severity CoreErrorSeverity
+}
+
+func (e ErrEditorInsert) Error() string {
+	return "editor: error inserting byte"
+}
+
+func (e ErrEditorInsert) GetSeverity() CoreErrorSeverity {
+	return e.severity
+}
+
+type ErrEditorDelete struct {
+	severity CoreErrorSeverity
+}
+
+func (e ErrEditorDelete) Error() string {
+	return "editor: error deleting byte"
+}
+
+func (e ErrEditorDelete) GetSeverity() CoreErrorSeverity {
+	return e.severity
+}
+
+type ErrEditorUndo struct {
+	severity CoreErrorSeverity
+}
+
+func (e ErrEditorUndo) Error() string {
+	return "editor: error undoing"
+}
+
+func (e ErrEditorUndo) GetSeverity() CoreErrorSeverity {
+	return e.severity
+}
+
+type ErrEditorRead struct {
+	severity CoreErrorSeverity
+}
+
+func (e ErrEditorRead) Error() string {
+	return "editor: error reading lines"
+}
+
+func (e ErrEditorRead) GetSeverity() CoreErrorSeverity {
+	return e.severity
+}
+
+type ErrEditorInternal struct {
+	message string
+}
+
+func (e ErrEditorInternal) Error() string {
+	return "editor: internal error"
+}
+
+func (e ErrEditorInternal) GetSeverity() CoreErrorSeverity {
+	return CoreErrorSeverityFatal
+}
+
+type ErrEditorQuit struct{}
+
+func (e ErrEditorQuit) Error() string {
+	return "editor: quit"
 }

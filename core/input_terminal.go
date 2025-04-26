@@ -7,6 +7,7 @@ import (
 	"os"
 	"unicode/utf8"
 
+	editorLog "github.com/joshtyf/texteditor/log"
 	"golang.org/x/sys/unix"
 )
 
@@ -14,12 +15,14 @@ const DEFAULT_BUFFER_READ_SIZE = 256
 
 type TerminalInput struct {
 	mapping map[string]Key
+	logger  *log.Logger
 }
 
 func NewTerminalInput() *TerminalInput {
 	// TODO: allow for custom sequences
 	return &TerminalInput{
 		mapping: defaultMapping,
+		logger:  editorLog.CreateLogger("input"),
 	}
 }
 
@@ -44,10 +47,11 @@ func (ti *TerminalInput) setup() error {
 	// TODO: Make it cross-platform
 	termios, err := unix.IoctlGetTermios(int(os.Stdin.Fd()), unix.TIOCGETA)
 	if err != nil {
-		log.Println("error getting terminal attributes")
+		ti.logger.Println("error getting terminal attributes")
 		return err
 	}
 	termios.Lflag &^= unix.ICANON | unix.ECHO
+	ti.logger.Printf("setting terminal attributes: %v", termios.Lflag)
 	err = unix.IoctlSetTermios(int(os.Stdin.Fd()), unix.TIOCSETA, termios)
 	if err != nil {
 		log.Println("error setting terminal attributes")
@@ -57,15 +61,15 @@ func (ti *TerminalInput) setup() error {
 }
 
 func (ti *TerminalInput) teardown() error {
-	log.Println("stopping input")
+	ti.logger.Println("stopping input")
 	termios, err := unix.IoctlGetTermios(int(os.Stdin.Fd()), unix.TIOCGETA)
 	if err != nil {
-		log.Println("error getting terminal attributes")
+		ti.logger.Println("error getting terminal attributes")
 	}
 	termios.Lflag |= unix.ICANON | unix.ECHO
 	err = unix.IoctlSetTermios(int(os.Stdin.Fd()), unix.TIOCSETA, termios)
 	if err != nil {
-		log.Printf("error resetting terminal attributes: %v", err)
+		ti.logger.Printf("error resetting terminal attributes: %v", err)
 	}
 	return nil
 }
@@ -75,7 +79,7 @@ func (ti *TerminalInput) listen() (*Key, error) {
 	var b [DEFAULT_BUFFER_READ_SIZE]byte
 	n, err := os.Stdin.Read(b[:])
 	if err != nil {
-		log.Printf("error reading from stdin: %v", err)
+		ti.logger.Printf("error reading from stdin: %v", err)
 		return nil, err
 	}
 
@@ -87,7 +91,7 @@ func (ti *TerminalInput) listen() (*Key, error) {
 	for i := 0; i < n; i++ {
 		r, width := utf8.DecodeRune(b[i:])
 		if r == utf8.RuneError {
-			log.Fatalf("error decoding rune: %v", b)
+			ti.logger.Println("error decoding rune: %v", b)
 		}
 		runes = append(runes, r)
 		i += width - 1

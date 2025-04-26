@@ -6,19 +6,24 @@ import (
 	"os"
 
 	"github.com/joshtyf/texteditor/core"
+	editorLog "github.com/joshtyf/texteditor/log"
 	"golang.org/x/term"
 )
 
 type OutputTerminal struct {
 	top                int
 	editorStateUpdates chan *core.EditorState
+	logger             *log.Logger
 }
 
 func NewOutputTerminal() *OutputTerminal {
-	return &OutputTerminal{
+	ot := &OutputTerminal{
 		top:                0,
 		editorStateUpdates: make(chan *core.EditorState),
+		logger:             editorLog.CreateLogger("output"),
 	}
+
+	return ot
 }
 
 func (ot *OutputTerminal) Listen(e *core.Editor) {
@@ -26,21 +31,21 @@ func (ot *OutputTerminal) Listen(e *core.Editor) {
 	// Hide cursor
 	_, err := os.Stdout.WriteString("\033[?25l")
 	if err != nil {
-		log.Fatalf("error hiding cursor: %v", err)
+		ot.logger.Printf("error hiding cursor: %v", err)
 	}
 	defer func() {
 		// Show cursor
 		_, err = os.Stdout.WriteString("\033[?25h")
 		if err != nil {
-			log.Printf("error showing cursor: %v", err)
+			ot.logger.Printf("error showing cursor: %v", err)
 		}
 	}()
 
 	for editorState := range ot.editorStateUpdates {
-		log.Printf("%s%s", cursorHome, clearScreen)
+		fmt.Printf("%s%s", cursorHome, clearScreen)
 		_, h, err := term.GetSize(int(os.Stdout.Fd()))
 		if err != nil {
-			log.Fatalf("error getting terminal size: %v", err)
+			ot.logger.Printf("error getting terminal size: %v", err)
 		}
 		if editorState.CurrentLine < ot.top {
 			ot.top = editorState.CurrentLine
@@ -49,7 +54,7 @@ func (ot *OutputTerminal) Listen(e *core.Editor) {
 		}
 		content, err := editorState.ReadEditorLines(ot.top, h-1) // Last line reserved for status line
 		if err != nil {
-			log.Fatalf("error reading lines: %v", err)
+			ot.logger.Printf("error reading lines: %v", err)
 		}
 		for i := range content {
 			// TODO: beautify this code
@@ -65,14 +70,19 @@ func (ot *OutputTerminal) Listen(e *core.Editor) {
 				if editorState.CurrentColumn+1 < len(content[i]) {
 					fmt.Printf("%s", content[i][editorState.CurrentColumn+1:])
 				}
-				log.Println("]")
+				fmt.Println("]")
 				continue
 			}
-			log.Printf("[%s]", content[i])
+			fmt.Printf("[%s]\n", content[i])
 		}
 		// Status line
-		fmt.Print("~end~")
+		if editorState.Error != nil {
+			// Should this check be done at the start?
+			fmt.Printf("~error~ %s", editorState.Error.Error())
+		} else {
+			fmt.Print("~end~")
+		}
 	}
-	log.Printf("%s%s", cursorHome, clearScreen)
-	log.Println("Closing output terminal")
+	fmt.Printf("%s%s", cursorHome, clearScreen)
+	ot.logger.Println("Closing output terminal")
 }

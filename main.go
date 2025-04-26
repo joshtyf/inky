@@ -2,24 +2,31 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log"
+	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
 	"github.com/joshtyf/texteditor/core"
+	editorLog "github.com/joshtyf/texteditor/log"
 	"github.com/joshtyf/texteditor/output"
 )
 
 func main() {
-	// Remove all log prefix
-	log.SetFlags(0)
+	logFile, err := os.OpenFile("editor.log", os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0666)
+	if err != nil {
+		log.Printf("error opening log file, %v", err)
+	} else {
+		editorLog.SetDefaultOutput(logFile)
+	}
 
 	editor := core.NewEditor(core.NewGapBuffer())
 	ot := output.NewOutputTerminal()
 	go ot.Listen(editor)
 	editorCtx, _ := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	if err := editor.Start(editorCtx, core.NewTerminalInput()); err != nil {
+	if err := editor.Start(editorCtx, core.NewTerminalInput()); err != nil && errors.Is(err, &core.ErrEditorQuit{}) {
 		log.Fatalf("error starting editor: %v", err)
 	}
 	// TODO: implement wait for proper shutdown

@@ -2,20 +2,11 @@ package core
 
 import (
 	"fmt"
-	"log"
 )
 
 const (
 	DEFAULT_BUFFER_SIZE = 20
 )
-
-type ErrInvalidPosition struct {
-	errPos int
-}
-
-func (e ErrInvalidPosition) Error() string {
-	return fmt.Sprintf("invalid position at %d", e.errPos)
-}
 
 type GapBuffer struct {
 	buffer       []byte
@@ -45,11 +36,14 @@ func NewGapBufferWithContent(content []byte) *GapBuffer {
 	}
 }
 
-func (gb *GapBuffer) cursorToBufferPos(cursor int) int {
-	if cursor <= gb.gapStart {
-		return cursor
+func (gb *GapBuffer) cursorToBufferPos(cursor int) (int, error) {
+	if cursor < 0 || cursor > gb.Len() {
+		return -1, fmt.Errorf("cursor out of range: %d", cursor)
 	}
-	return cursor + gb.getGapSize()
+	if cursor <= gb.gapStart {
+		return cursor, nil
+	}
+	return cursor + gb.getGapSize(), nil
 }
 
 func (gb *GapBuffer) bufferPosToCursor(pos int) int {
@@ -61,7 +55,7 @@ func (gb *GapBuffer) bufferPosToCursor(pos int) int {
 
 func (gb *GapBuffer) shiftGapEndTo(pos int) error {
 	if pos < gb.gapEnd || pos > len(gb.buffer) {
-		return ErrInvalidPosition{errPos: pos}
+		return fmt.Errorf("position out of range: %d", pos)
 	}
 	if pos == gb.gapEnd {
 		return nil
@@ -78,7 +72,7 @@ func (gb *GapBuffer) shiftGapEndTo(pos int) error {
 
 func (gb *GapBuffer) shiftGapStartTo(pos int) error {
 	if pos < 0 || pos > gb.gapStart {
-		return ErrInvalidPosition{errPos: pos}
+		return fmt.Errorf("position out of range: %d", pos)
 	}
 	if pos == gb.gapStart {
 		return nil
@@ -113,9 +107,7 @@ func (gb *GapBuffer) resizeBuffer(requiredSize int) {
 func (gb *GapBuffer) save() error {
 	if gb.latestChange != nil {
 		if len(gb.latestChange.Data) > 0 && len(gb.latestChange.Data) != gb.latestChange.Length {
-			return fmt.Errorf("error saving buffer: change data length %d does not match change length %d",
-				len(gb.latestChange.Data), gb.latestChange.Length,
-			)
+			return fmt.Errorf("save data length mismatch: expected %d, got %d instead", len(gb.latestChange.Data), gb.latestChange.Length)
 		}
 		gb.undoList = append(gb.undoList, gb.latestChange)
 		gb.latestChange = nil
@@ -124,13 +116,14 @@ func (gb *GapBuffer) save() error {
 }
 
 func (gb *GapBuffer) SeekToChar(cursor int, char byte, count int) (int, error) {
-	if cursor < 0 || cursor > gb.Len() {
-		return -1, ErrInvalidPosition{errPos: cursor}
-	}
 	if count <= 0 {
-		return -1, fmt.Errorf("count must be greater than 0")
+		return -1, fmt.Errorf("buffer: expect positive count, got %d instead", count)
 	}
-	pos := gb.cursorToBufferPos(cursor)
+	pos, err := gb.cursorToBufferPos(cursor)
+	if err != nil {
+		return -1, fmt.Errorf("buffer: error converting cursor to buffer position when seeking to character: %s", err)
+	}
+
 	for i := pos; i < len(gb.buffer); i++ {
 		if i == gb.gapStart {
 			i = gb.gapEnd
@@ -149,13 +142,13 @@ func (gb *GapBuffer) SeekToChar(cursor int, char byte, count int) (int, error) {
 }
 
 func (gb *GapBuffer) ReverseSeekToChar(cursor int, char byte, count int) (int, error) {
-	if cursor < 0 || cursor > gb.Len() {
-		return -1, ErrInvalidPosition{errPos: cursor}
-	}
 	if count <= 0 {
-		return -1, fmt.Errorf("count must be greater than 0")
+		return -1, fmt.Errorf("buffer: expect positive count, got %d instead", count)
 	}
-	pos := gb.cursorToBufferPos(cursor)
+	pos, err := gb.cursorToBufferPos(cursor)
+	if err != nil {
+		return -1, fmt.Errorf("buffer: error converting cursor to buffer position when reverse seeking to character: %s", err)
+	}
 	for i := pos; i >= 0; i-- {
 		if i == gb.gapEnd {
 			i = gb.gapStart
@@ -174,13 +167,13 @@ func (gb *GapBuffer) ReverseSeekToChar(cursor int, char byte, count int) (int, e
 }
 
 func (gb *GapBuffer) Read(cursor int, length int) ([]byte, error) {
-	if cursor < 0 || cursor > gb.Len() {
-		return nil, ErrInvalidPosition{errPos: cursor}
-	}
 	if length < 0 {
-		return nil, fmt.Errorf("length must be greater than 0")
+		return nil, fmt.Errorf("buffer: negative length %d received", length)
 	}
-	pos := gb.cursorToBufferPos(cursor)
+	pos, err := gb.cursorToBufferPos(cursor)
+	if err != nil {
+		return nil, fmt.Errorf("buffer: error converting cursor to buffer position when reading: %s", err)
+	}
 	contents := make([]byte, 0)
 	for i := pos; i < len(gb.buffer) && len(contents) < length; i++ {
 		if i == gb.gapStart {
@@ -195,16 +188,13 @@ func (gb *GapBuffer) Read(cursor int, length int) ([]byte, error) {
 }
 
 func (gb *GapBuffer) InsertByte(b byte, cursor int) error {
-	if cursor < 0 || cursor > gb.Len() {
-		return ErrInvalidPosition{errPos: cursor}
-	}
 	if gb.getGapSize() == 0 {
 		gb.resizeBuffer(len(gb.buffer) + 1)
 	}
 	if gb.latestChange == nil || cursor != gb.latestChange.Cursor+gb.latestChange.Length || len(gb.latestChange.Data) > 0 {
 		err := gb.save()
 		if err != nil {
-			return err
+			return fmt.Errorf("buffer: error saving before inserting byte: %s", err)
 		}
 		gb.latestChange = &ChangeNode{
 			Cursor: cursor,
@@ -212,16 +202,17 @@ func (gb *GapBuffer) InsertByte(b byte, cursor int) error {
 			Data:   make([]byte, 0),
 		}
 	}
-	pos := gb.cursorToBufferPos(cursor)
+	pos, err := gb.cursorToBufferPos(cursor)
+	if err != nil {
+		return fmt.Errorf("buffer: error converting cursor to buffer position when getting byte: %s", err)
+	}
 	if pos <= gb.gapStart {
 		if err := gb.shiftGapStartTo(pos); err != nil {
-			log.Printf("error shifting gap start to %d: %v", pos, err)
-			return ErrInvalidPosition{errPos: cursor}
+			return fmt.Errorf("buffer: error shifting gap start to %d when inserting byte, %s", pos, err)
 		}
 	} else {
 		if err := gb.shiftGapEndTo(pos); err != nil {
-			log.Printf("error shifting gap end to %d: %v", pos, err)
-			return ErrInvalidPosition{errPos: cursor}
+			return fmt.Errorf("buffer: error shifting gap end to %d when inserting byte, %s", pos, err)
 		}
 	}
 	gb.buffer[gb.gapStart] = b
@@ -231,7 +222,7 @@ func (gb *GapBuffer) InsertByte(b byte, cursor int) error {
 	if b == ' ' || b == '\n' {
 		err := gb.save()
 		if err != nil {
-			return err
+			return fmt.Errorf("buffer: error saving after whitespace or newline inserted: %s", err)
 		}
 		gb.latestChange = &ChangeNode{
 			Cursor: cursor + 1, // Next change will start after the inserted byte
@@ -243,13 +234,10 @@ func (gb *GapBuffer) InsertByte(b byte, cursor int) error {
 }
 
 func (gb *GapBuffer) DeleteByte(cursor int) error {
-	if cursor < 0 || cursor >= gb.Len() { // TODO: Is this correct?
-		return ErrInvalidPosition{errPos: cursor}
-	}
 	if gb.latestChange == nil || cursor != gb.latestChange.Cursor-gb.latestChange.Length || len(gb.latestChange.Data) == 0 {
 		err := gb.save()
 		if err != nil {
-			return err
+			return fmt.Errorf("buffer: error saving before deleting byte: %s", err)
 		}
 		gb.latestChange = &ChangeNode{
 			Cursor: cursor,
@@ -257,16 +245,17 @@ func (gb *GapBuffer) DeleteByte(cursor int) error {
 			Data:   make([]byte, 0),
 		}
 	}
-	pos := gb.cursorToBufferPos(cursor)
+	pos, err := gb.cursorToBufferPos(cursor)
+	if err != nil {
+		return fmt.Errorf("buffer: error converting cursor to buffer position when getting byte: %s", err)
+	}
 	if pos <= gb.gapStart {
 		if err := gb.shiftGapStartTo(pos); err != nil {
-			log.Printf("error shifting gap start to %d: %v", pos, err)
-			return ErrInvalidPosition{errPos: cursor}
+			return fmt.Errorf("buffer: error shifting gap start to %d when deleting byte: %s", pos, err)
 		}
 	} else {
 		if err := gb.shiftGapEndTo(pos); err != nil {
-			log.Printf("error shifting gap end to %d: %v", pos, err)
-			return ErrInvalidPosition{errPos: cursor}
+			return fmt.Errorf("buffer: error shifting gap end to %d when deleting byte: %s", pos, err)
 		}
 	}
 	byteToDelete := gb.buffer[gb.gapEnd]
@@ -278,10 +267,13 @@ func (gb *GapBuffer) DeleteByte(cursor int) error {
 }
 
 func (gb *GapBuffer) GetByte(cursor int) (byte, error) {
-	if cursor < 0 || cursor >= gb.Len() { // TODO: Is this correct?
-		return 0, ErrInvalidPosition{errPos: cursor}
+	if cursor < 0 || cursor >= gb.Len() {
+		return 0, fmt.Errorf("buffer: cursor out of range: %d", cursor)
 	}
-	pos := gb.cursorToBufferPos(cursor)
+	pos, err := gb.cursorToBufferPos(cursor)
+	if err != nil {
+		return 0, fmt.Errorf("buffer: error converting cursor to buffer position when getting byte: %s", err)
+	}
 	return gb.buffer[pos], nil
 }
 
@@ -290,31 +282,34 @@ func (gb *GapBuffer) Undo() (*ChangeNode, error) {
 	// Save the current state before undoing
 	err := gb.save()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("buffer: error saving before undoing: %s", err)
 	}
 	if len(gb.undoList) == 0 {
-		// TODO: if there are no undoes, should we throw an error?
-		return nil, fmt.Errorf("nothing to undo")
+		return nil, nil
 	}
 	lastUndo := gb.undoList[len(gb.undoList)-1]
 	gb.undoList = gb.undoList[:len(gb.undoList)-1]
 	var undoPos int
 	if len(lastUndo.Data) > 0 {
 		// Seek to the position of the last deleted byte
-		undoPos = gb.cursorToBufferPos(lastUndo.Cursor - lastUndo.Length + 1)
+		undoPos, err = gb.cursorToBufferPos(lastUndo.Cursor - lastUndo.Length + 1)
+		if err != nil {
+			return nil, fmt.Errorf("buffer: error converting cursor to buffer position when undoing a delete: %s", err)
+		}
 	} else {
 		// Seek to the position of the first inserted byte
-		undoPos = gb.cursorToBufferPos(lastUndo.Cursor)
+		undoPos, err = gb.cursorToBufferPos(lastUndo.Cursor)
+		if err != nil {
+			return nil, fmt.Errorf("buffer: error converting cursor to buffer position when undoing an insert: %s", err)
+		}
 	}
 	if undoPos <= gb.gapStart {
 		if err := gb.shiftGapStartTo(undoPos); err != nil {
-			log.Printf("error shifting gap start to %d: %v", undoPos, err)
-			return nil, ErrInvalidPosition{errPos: undoPos}
+			return nil, fmt.Errorf("buffer: error shifting gap start to %d when undoing: %s", undoPos, err)
 		}
 	} else {
 		if err := gb.shiftGapEndTo(undoPos); err != nil {
-			log.Printf("error shifting gap end to %d: %v", undoPos, err)
-			return nil, ErrInvalidPosition{errPos: undoPos}
+			return nil, fmt.Errorf("buffer: error shifting gap end to %d when undoing: %s", undoPos, err)
 		}
 	}
 	if len(lastUndo.Data) > 0 {
@@ -335,21 +330,4 @@ func (gb *GapBuffer) Undo() (*ChangeNode, error) {
 
 func (gb *GapBuffer) Len() int {
 	return len(gb.buffer) - gb.getGapSize()
-}
-
-func (gb *GapBuffer) GetInfo() string {
-	if gb.latestChange == nil {
-		return fmt.Sprintf("Buffer: %v, Undo List Length: %d, Buffer saved",
-			gb.buffer, len(gb.undoList),
-		)
-	} else {
-		return fmt.Sprintf("Buffer: %v\nUndo List Length: %d\nChange Start: %d, Change Len: %d, Change Data: %v",
-			gb.buffer,
-			len(gb.undoList),
-			gb.latestChange.Cursor,
-			gb.latestChange.Length,
-			gb.latestChange.Data,
-		)
-	}
-
 }
