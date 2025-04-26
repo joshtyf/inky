@@ -2,6 +2,10 @@
 
 ## Progress
 
+### 26/04/2025
+
+Tried to improve the error handling of the entire editor. Right now, my editor is "bug free" (or at least I haven't encountered any bugs yet), so it's difficult to see if my error handling design is good or not. It's a start I suppose.
+
 ### 25/04/2025
 
 Major refactoring day. Moved the core editor code into a `core` package and kept the UI or view in a separate `output` package. The bridge between the two would be the `EditorState` struct that contains the necessary information/functions to update the view.
