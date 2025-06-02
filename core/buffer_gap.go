@@ -116,6 +116,7 @@ func (gb *GapBuffer) save() error {
 }
 
 func (gb *GapBuffer) SeekToChar(cursor int, char byte, count int) (int, error) {
+	// TODO: add a test case to account for when i jumps over the gap
 	if count <= 0 {
 		return -1, fmt.Errorf("buffer: expect positive count, got %d instead", count)
 	}
@@ -124,7 +125,7 @@ func (gb *GapBuffer) SeekToChar(cursor int, char byte, count int) (int, error) {
 		return -1, fmt.Errorf("buffer: error converting cursor to buffer position when seeking to character: %s", err)
 	}
 
-	for i := pos; i < len(gb.buffer); i++ {
+	for i, dist := pos, 0; i < len(gb.buffer); i, dist = i+1, dist+1 {
 		if i == gb.gapStart {
 			i = gb.gapEnd
 			if i == len(gb.buffer) {
@@ -134,7 +135,7 @@ func (gb *GapBuffer) SeekToChar(cursor int, char byte, count int) (int, error) {
 		if gb.buffer[i] == char {
 			count--
 			if count == 0 {
-				return i, nil
+				return cursor + dist, nil
 			}
 		}
 	}
@@ -149,7 +150,7 @@ func (gb *GapBuffer) ReverseSeekToChar(cursor int, char byte, count int) (int, e
 	if err != nil {
 		return -1, fmt.Errorf("buffer: error converting cursor to buffer position when reverse seeking to character: %s", err)
 	}
-	for i := pos; i >= 0; i-- {
+	for i, dist := pos, 0; i >= 0; i, dist = i-1, dist+1 {
 		if i == gb.gapEnd {
 			i = gb.gapStart
 			if i < 0 {
@@ -159,7 +160,7 @@ func (gb *GapBuffer) ReverseSeekToChar(cursor int, char byte, count int) (int, e
 		if gb.buffer[i] == char {
 			count--
 			if count == 0 {
-				return i, nil
+				return cursor - dist, nil
 			}
 		}
 	}
