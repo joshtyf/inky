@@ -28,25 +28,21 @@ func NewOutputTerminal() *OutputTerminal {
 
 func (ot *OutputTerminal) Listen(e *core.Editor) {
 	e.RegisterListener(ot.editorStateUpdates)
-	// Hide cursor
-	_, err := os.Stdout.WriteString("\033[?25l")
-	if err != nil {
-		ot.logger.Printf("error hiding cursor: %v", err)
-	}
-	defer func() {
-		// Show cursor
-		_, err = os.Stdout.WriteString("\033[?25h")
-		if err != nil {
-			ot.logger.Printf("error showing cursor: %v", err)
-		}
-	}()
 
 	for editorState := range ot.editorStateUpdates {
-		fmt.Printf("%s%s", cursorHome, clearScreen)
 		_, h, err := term.GetSize(int(os.Stdout.Fd()))
 		if err != nil {
 			ot.logger.Printf("error getting terminal size: %v", err)
 		}
+		// Status line
+		if editorState.Error != nil {
+			// Last line reserved for status line
+			// TODO: refactor updating of status line into a separate function
+			ot.writeLine(h-1, fmt.Sprintf("~error~ %s", editorState.Error.Error()))
+			continue
+		}
+		fmt.Printf("%s%s", cursorHome, clearScreen)
+		// Reposition screen to match editor view
 		if editorState.CurrentLine < ot.top {
 			ot.top = editorState.CurrentLine
 		} else if editorState.CurrentLine >= ot.top+h-1 {
@@ -54,35 +50,31 @@ func (ot *OutputTerminal) Listen(e *core.Editor) {
 		}
 		content, err := editorState.ReadEditorLines(ot.top, h-1) // Last line reserved for status line
 		if err != nil {
+			// TODO: update the status line? how to handle this?
 			ot.logger.Printf("error reading lines: %v", err)
 		}
 		for i := range content {
-			// TODO: beautify this code
-			// Add highlight to the current column current line
-			if i == editorState.CurrentLine-ot.top {
-				fmt.Printf("[%s", content[i][:editorState.CurrentColumn])
-				if editorState.CurrentColumn < len(content[i]) {
-					// Highlight the current character
-					fmt.Printf("%s%s%s", highlightStart, string(content[i][editorState.CurrentColumn]), highlightEnd)
-				} else {
-					fmt.Printf("%s %s", highlightStart, highlightEnd)
-				}
-				if editorState.CurrentColumn+1 < len(content[i]) {
-					fmt.Printf("%s", content[i][editorState.CurrentColumn+1:])
-				}
-				fmt.Println("]")
-				continue
-			}
-			fmt.Printf("[%s]\n", content[i])
+			ot.writeLine(i, fmt.Sprintf("~ %s", content[i]))
 		}
-		// Status line
-		if editorState.Error != nil {
-			// Should this check be done at the start?
-			fmt.Printf("~error~ %s", editorState.Error.Error())
-		} else {
-			fmt.Print("~end~")
-		}
+		ot.writeLine(h-1, "~end~")
+
+		// // Reposition cursor to current line and column
+		fmt.Printf("\033[%d;%dH", editorState.CurrentLine-ot.top+1, editorState.CurrentColumn+3)
 	}
 	fmt.Printf("%s%s", cursorHome, clearScreen)
 	ot.logger.Println("Closing output terminal")
+}
+
+func (ot *OutputTerminal) writeLine(line int, content string) error {
+	_, h, err := term.GetSize(int(os.Stdout.Fd()))
+	if err != nil {
+		return fmt.Errorf("error getting terminal size: %w", err)
+	}
+	if line >= h {
+		return fmt.Errorf("line %d is out of bounds for terminal height %d", line, h)
+	}
+	os.Stdout.WriteString("\033[s")
+	os.Stdout.WriteString(fmt.Sprintf("\033[%d;1H%s", line+1, content))
+	os.Stdout.WriteString("\033[u")
+	return nil
 }
