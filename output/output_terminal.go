@@ -26,7 +26,19 @@ func NewOutputTerminal() *OutputTerminal {
 	return ot
 }
 
-func (ot *OutputTerminal) Listen(e *core.Editor) {
+func (ot *OutputTerminal) StartAndListen(e *core.Editor) error {
+	// Initialize the output terminal screen
+	if err := ot.init(); err != nil {
+		return fmt.Errorf("error initializing output terminal: %w", err)
+	}
+
+	// Start listening for editor state updates
+	go ot.listen(e)
+
+	return nil
+}
+
+func (ot *OutputTerminal) listen(e *core.Editor) {
 	e.RegisterListener(ot.editorStateUpdates)
 
 	for editorState := range ot.editorStateUpdates {
@@ -63,6 +75,22 @@ func (ot *OutputTerminal) Listen(e *core.Editor) {
 	}
 	fmt.Printf("%s%s", cursorHome, clearScreen)
 	ot.logger.Println("Closing output terminal")
+}
+
+func (ot *OutputTerminal) init() error {
+	_, h, err := term.GetSize(int(os.Stdout.Fd()))
+	if err != nil {
+		return err
+	}
+	fmt.Printf("%s%s", cursorHome, clearScreen)
+	for i := range h {
+		if err := ot.writeLine(i, "~ "); err != nil {
+			return err
+		}
+	}
+	ot.writeLine(h-1, "~end~")
+	fmt.Print("\033[1;3H")
+	return nil
 }
 
 func (ot *OutputTerminal) writeLine(line int, content string) error {

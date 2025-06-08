@@ -24,7 +24,7 @@ func main() {
 
 	editor := core.NewEditor(core.NewGapBuffer())
 	ot := output.NewOutputTerminal()
-	go ot.Listen(editor)
+	ot.StartAndListen(editor)
 	editorCtx, _ := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	if err := editor.Start(editorCtx, core.NewTerminalInput()); err != nil && errors.Is(err, &core.ErrEditorQuit{}) {
 		log.Fatalf("error starting editor: %v", err)
