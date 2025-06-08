@@ -28,4 +28,6 @@ func main() {
 	if err := editor.Start(editorCtx, core.NewTerminalInput()); err != nil && errors.Is(err, &core.ErrEditorQuit{}) {
 		log.Fatalf("error starting editor: %v", err)
 	}
+	editor.Shutdown()
+	ot.Close()
 }

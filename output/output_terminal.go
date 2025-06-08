@@ -73,8 +73,7 @@ func (ot *OutputTerminal) listen(e *core.Editor) {
 		// // Reposition cursor to current line and column
 		fmt.Printf("\033[%d;%dH", editorState.CurrentLine-ot.top+1, editorState.CurrentColumn+3)
 	}
-	fmt.Printf("%s%s", cursorHome, clearScreen)
-	ot.logger.Println("Closing output terminal")
+	ot.logger.Println("editor closed")
 }
 
 func (ot *OutputTerminal) init() error {
@@ -90,6 +89,13 @@ func (ot *OutputTerminal) init() error {
 	}
 	ot.writeLine(h-1, "~end~")
 	fmt.Print("\033[1;3H")
+	return nil
+}
+
+func (ot *OutputTerminal) Close() error {
+	// Not sure if this is the cleanest way to close the terminal output
+	ot.logger.Println("Closing output terminal")
+	fmt.Printf("%s%s", cursorHome, clearScreen)
 	return nil
 }
 

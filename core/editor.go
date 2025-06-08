@@ -52,10 +52,6 @@ func (e *Editor) Start(ctx context.Context, input input) error {
 		}
 	}
 	defer func() {
-		// Note: e.close() needs to be called before input.close()
-		// to ensure that all listeners are notified before closing the input channel
-		// TODO: remove this ordering dependency
-		e.close()
 		if input.close() != nil {
 			// TODO: should we panic here?
 			e.logger.Println("error closing input channel")
@@ -128,7 +124,7 @@ func (e *Editor) notifyListeners(es *EditorState) {
 	}
 }
 
-func (e *Editor) close() {
+func (e *Editor) Shutdown() {
 	for _, ch := range e.listeners {
 		close(ch)
 	}
