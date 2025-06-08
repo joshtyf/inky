@@ -2,7 +2,6 @@ package core
 
 import (
 	"context"
-	"errors"
 	"log"
 
 	editorLog "github.com/joshtyf/texteditor/log"
@@ -45,25 +44,37 @@ func (e *Editor) RegisterListener(ch chan<- *EditorState) {
 
 func (e *Editor) Start(ctx context.Context, input input) error {
 	e.logger.Println("starting")
-	inputCh := make(chan *Key)
-	inputCtx, cancelInput := context.WithCancelCause(ctx)
-	go input.start(inputCtx, cancelInput, inputCh)
+	inputCh, err := input.start()
+	if err != nil {
+		e.logger.Printf("error starting input: %s", err)
+		return ErrEditorInternal{
+			message: "failed to start input",
+		}
+	}
 	defer func() {
+		// Note: e.close() needs to be called before input.close()
+		// to ensure that all listeners are notified before closing the input channel
+		// TODO: remove this ordering dependency
 		e.close()
-		cancelInput(nil)
+		if input.close() != nil {
+			// TODO: should we panic here?
+			e.logger.Println("error closing input channel")
+		}
 	}()
+
 	for {
 		var err error = nil
 		select {
 		case <-ctx.Done():
 			e.logger.Println("context stopped")
 			return ErrEditorQuit{}
-		case <-inputCtx.Done():
-			e.logger.Printf("input cancelled: %s", context.Cause(inputCtx))
-			return ErrEditorInternal{
-				message: context.Cause(inputCtx).Error(),
-			}
 		case k := <-inputCh:
+			if k == nil {
+				e.logger.Println("input channel closed unexpectedly")
+				return ErrEditorInternal{
+					message: "input channel closed unexpectedly",
+				}
+			}
 			switch k.Code {
 			case CtrlD:
 				e.logger.Println("Ctrl+D pressed")
@@ -95,7 +106,6 @@ func (e *Editor) Start(ctx context.Context, input input) error {
 				err = e.undo()
 			}
 			if coreError, ok := err.(CoreError); ok && coreError.GetSeverity() == CoreErrorSeverityFatal {
-				cancelInput(errors.New("unexpected fatal error encountered"))
 				return coreError
 			}
 			e.notifyListeners(

@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/joshtyf/texteditor/core"
 	editorLog "github.com/joshtyf/texteditor/log"
@@ -29,6 +28,4 @@ func main() {
 	if err := editor.Start(editorCtx, core.NewTerminalInput()); err != nil && errors.Is(err, &core.ErrEditorQuit{}) {
 		log.Fatalf("error starting editor: %v", err)
 	}
-	// TODO: implement wait for proper shutdown
-	time.Sleep(time.Second * 2)
 }

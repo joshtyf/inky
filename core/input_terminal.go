@@ -1,7 +1,6 @@
 package core
 
 import (
-	"context"
 	"errors"
 	"log"
 	"os"
@@ -26,21 +25,23 @@ func NewTerminalInput() *TerminalInput {
 	}
 }
 
-func (ti *TerminalInput) start(ctx context.Context, cancelInput context.CancelCauseFunc, inputCh chan<- *Key) error {
+// Indicate to user that teardown must be called as defer
+func (ti *TerminalInput) start() (<-chan *Key, error) {
 	ti.setup()
-	defer ti.teardown()
-
+	inputCh := make(chan *Key)
 	go func() {
+		defer close(inputCh)
+
 		for {
 			k, err := ti.listen()
 			if err != nil {
-				cancelInput(err)
+				ti.logger.Printf("error listening for input: %v", err)
+				return
 			}
 			inputCh <- k
 		}
 	}()
-	<-ctx.Done()
-	return nil
+	return inputCh, nil
 }
 
 func (ti *TerminalInput) setup() error {
@@ -60,7 +61,7 @@ func (ti *TerminalInput) setup() error {
 	return nil
 }
 
-func (ti *TerminalInput) teardown() error {
+func (ti *TerminalInput) close() error {
 	ti.logger.Println("stopping input")
 	termios, err := unix.IoctlGetTermios(int(os.Stdin.Fd()), unix.TIOCGETA)
 	if err != nil {

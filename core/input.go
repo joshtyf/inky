@@ -1,7 +1,5 @@
 package core
 
-import "context"
-
 var defaultMapping = map[string]Key{
 	// Arrow Keys
 	"\x1b[A": {Code: ArrowUp},
@@ -17,5 +15,6 @@ var defaultMapping = map[string]Key{
 }
 
 type input interface {
-	start(context.Context, context.CancelCauseFunc, chan<- *Key) error
+	start() (<-chan *Key, error)
+	close() error
 }
