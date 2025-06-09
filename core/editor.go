@@ -17,6 +17,12 @@ type EditorState struct {
 	Error error
 }
 
+type EditorIO interface {
+	StartIO() (<-chan *Key, error)
+	SetDisplay(es *EditorState) error
+	Close() error
+}
+
 type Editor struct {
 	lines         []int
 	currentLine   int
@@ -24,9 +30,10 @@ type Editor struct {
 	buf           Buffer
 	listeners     []chan<- *EditorState
 	logger        *log.Logger
+	io            EditorIO
 }
 
-func NewEditor(buf Buffer) *Editor {
+func NewEditor(io EditorIO, buf Buffer) *Editor {
 	// TODO: proper initialization with buffer
 	return &Editor{
 		lines:         make([]int, 1),
@@ -35,6 +42,7 @@ func NewEditor(buf Buffer) *Editor {
 		buf:           buf,
 		listeners:     make([]chan<- *EditorState, 0),
 		logger:        editorLog.CreateLogger("editor"),
+		io:            io,
 	}
 }
 
@@ -42,9 +50,9 @@ func (e *Editor) RegisterListener(ch chan<- *EditorState) {
 	e.listeners = append(e.listeners, ch)
 }
 
-func (e *Editor) Start(ctx context.Context, input input) error {
+func (e *Editor) Start(ctx context.Context) error {
 	e.logger.Println("starting")
-	inputCh, err := input.start()
+	inputCh, err := e.io.StartIO()
 	if err != nil {
 		e.logger.Printf("error starting input: %s", err)
 		return ErrEditorInternal{
@@ -52,9 +60,8 @@ func (e *Editor) Start(ctx context.Context, input input) error {
 		}
 	}
 	defer func() {
-		if input.close() != nil {
-			// TODO: should we panic here?
-			e.logger.Println("error closing input channel")
+		if e.io.Close() != nil {
+			e.logger.Println("error closing IO")
 		}
 	}()
 
@@ -104,7 +111,7 @@ func (e *Editor) Start(ctx context.Context, input input) error {
 			if coreError, ok := err.(CoreError); ok && coreError.GetSeverity() == CoreErrorSeverityFatal {
 				return coreError
 			}
-			e.notifyListeners(
+			e.io.SetDisplay(
 				&EditorState{
 					KeyPressed:      k,
 					CurrentLine:     e.currentLine,
@@ -115,18 +122,6 @@ func (e *Editor) Start(ctx context.Context, input input) error {
 			)
 		}
 
-	}
-}
-
-func (e *Editor) notifyListeners(es *EditorState) {
-	for _, ch := range e.listeners {
-		ch <- es
-	}
-}
-
-func (e *Editor) Shutdown() {
-	for _, ch := range e.listeners {
-		close(ch)
 	}
 }
 
