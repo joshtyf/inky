@@ -235,6 +235,12 @@ func (gb *GapBuffer) InsertByte(b byte, cursor int) error {
 }
 
 func (gb *GapBuffer) DeleteByte(cursor int) error {
+	if gb.Len() == 0 {
+		return fmt.Errorf("buffer: cannot delete byte from an empty buffer")
+	}
+	if cursor >= gb.Len() {
+		return fmt.Errorf("buffer: cursor must be on a non-empty buffer position, got %d instead", cursor)
+	}
 	if gb.latestChange == nil || cursor != gb.latestChange.Cursor-gb.latestChange.Length || len(gb.latestChange.Data) == 0 {
 		err := gb.save()
 		if err != nil {

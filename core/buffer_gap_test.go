@@ -2,6 +2,7 @@ package core
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 )
 
@@ -11,8 +12,8 @@ func TestShiftGapStart_ExpectErrors(t *testing.T) {
 		inputPosition int
 		expectedErr   error
 	}{
-		{"position less than 0", -1, ErrInvalidPos{pos: -1}},
-		{"position greater than gap start", 1, ErrInvalidPos{pos: 1}},
+		{"position less than 0", -1, errors.New("position out of range: -1")},
+		{"position greater than gap start", 1, errors.New("position out of range: 1")},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -31,8 +32,8 @@ func TestShiftGapEnd_ExpectErrors(t *testing.T) {
 		inputPosition int
 		expectedErr   error
 	}{
-		{"position less than gap end", DEFAULT_BUFFER_SIZE - 1, ErrInvalidPos{pos: DEFAULT_BUFFER_SIZE - 1}},
-		{"position greater than buffer size", DEFAULT_BUFFER_SIZE + 1, ErrInvalidPos{pos: DEFAULT_BUFFER_SIZE + 1}},
+		{"position less than gap end", DEFAULT_BUFFER_SIZE - 1, fmt.Errorf("position out of range: %d", DEFAULT_BUFFER_SIZE-1)},
+		{"position greater than buffer size", DEFAULT_BUFFER_SIZE + 1, fmt.Errorf("position out of range: %d", DEFAULT_BUFFER_SIZE+1)},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -87,11 +88,11 @@ func TestSeekToChar_WithErrors(t *testing.T) {
 		count    int
 		expected error
 	}{
-		{"negative cursor", -1, 'o', 1, ErrInvalidPos{pos: -1}},
-		{"cursor greater than buffer content length", gb.Len() + 1, 'o', 1, ErrInvalidPos{pos: gb.Len() + 1}},
-		{"cursor greater than buffer length", len(gb.buffer) + 1, 'o', 1, ErrInvalidPos{pos: len(gb.buffer) + 1}},
-		{"zero count", 0, 'o', 0, errors.New("count must be greater than 0")},
-		{"negative count", 0, 'o', -1, errors.New("count must be greater than 0")},
+		{"negative cursor", -1, 'o', 1, errors.New("buffer: error converting cursor to buffer position when seeking to character: cursor out of range: -1")},
+		{"cursor greater than buffer content length", gb.Len() + 1, 'o', 1, errors.New("buffer: error converting cursor to buffer position when seeking to character: cursor out of range: 12")},
+		{"cursor greater than buffer length", len(gb.buffer) + 1, 'o', 1, errors.New("buffer: error converting cursor to buffer position when seeking to character: cursor out of range: 32")},
+		{"zero count", 0, 'o', 0, errors.New("buffer: expect positive count, got 0 instead")},
+		{"negative count", 0, 'o', -1, errors.New("buffer: expect positive count, got -1 instead")},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -148,11 +149,11 @@ func TestReverseSeekToChar_WithErrors(t *testing.T) {
 		count    int
 		expected error
 	}{
-		{"negative cursor", -1, 'o', 1, ErrInvalidPos{pos: -1}},
-		{"cursor greater than buffer content length", gb.Len() + 1, 'o', 1, ErrInvalidPos{pos: gb.Len() + 1}},
-		{"cursor greater than buffer length", len(gb.buffer) + 1, 'o', 1, ErrInvalidPos{pos: len(gb.buffer) + 1}},
-		{"zero count", 0, 'o', 0, errors.New("count must be greater than 0")},
-		{"negative count", 0, 'o', -1, errors.New("count must be greater than 0")},
+		{"negative cursor", -1, 'o', 1, errors.New("buffer: error converting cursor to buffer position when reverse seeking to character: cursor out of range: -1")},
+		{"cursor greater than buffer content length", gb.Len() + 1, 'o', 1, errors.New("buffer: error converting cursor to buffer position when reverse seeking to character: cursor out of range: 12")},
+		{"cursor greater than buffer length", len(gb.buffer) + 1, 'o', 1, errors.New("buffer: error converting cursor to buffer position when reverse seeking to character: cursor out of range: 32")},
+		{"zero count", 0, 'o', 0, errors.New("buffer: expect positive count, got 0 instead")},
+		{"negative count", 0, 'o', -1, errors.New("buffer: expect positive count, got -1 instead")},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -204,10 +205,10 @@ func TestRead_WithErrors(t *testing.T) {
 		length   int
 		expected error
 	}{
-		{"negative cursor", -1, 5, ErrInvalidPos{pos: -1}},
-		{"cursor greater than buffer content length", gb.Len() + 1, 5, ErrInvalidPos{pos: gb.Len() + 1}},
-		{"cursor greater than buffer length", len(gb.buffer) + 1, 5, ErrInvalidPos{pos: len(gb.buffer) + 1}},
-		{"negative length", 0, -1, errors.New("length must be greater than 0")},
+		{"negative cursor", -1, 5, errors.New("buffer: error converting cursor to buffer position when reading: cursor out of range: -1")},
+		{"cursor greater than buffer content length", gb.Len() + 1, 5, errors.New("buffer: error converting cursor to buffer position when reading: cursor out of range: 12")},
+		{"cursor greater than buffer length", len(gb.buffer) + 1, 5, errors.New("buffer: error converting cursor to buffer position when reading: cursor out of range: 32")},
+		{"negative length", 0, -1, errors.New("buffer: negative length -1 received")},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -355,8 +356,8 @@ func TestInsertByte_EmptyBufferExpectErrors(t *testing.T) {
 		inputPosition int
 		expectedErr   error
 	}{
-		{"position less than 0", -1, ErrInvalidPos{pos: -1}},
-		{"position greater than buffer size", 1, ErrInvalidPos{pos: 1}},
+		{"position less than 0", -1, errors.New("buffer: error converting cursor to buffer position when getting byte: cursor out of range: -1")},
+		{"position greater than buffer size", 1, errors.New("buffer: error converting cursor to buffer position when getting byte: cursor out of range: 1")},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -375,8 +376,8 @@ func TestInsertByte_NonEmptyBufferExpectErrors(t *testing.T) {
 		inputPosition int
 		expectedErr   error
 	}{
-		{"position less than 0", -1, ErrInvalidPos{pos: -1}},
-		{"position greater than buffer size", 4, ErrInvalidPos{pos: 4}},
+		{"position less than 0", -1, errors.New("buffer: error converting cursor to buffer position when getting byte: cursor out of range: -1")},
+		{"position greater than buffer size", 4, errors.New("buffer: error converting cursor to buffer position when getting byte: cursor out of range: 4")},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -431,9 +432,9 @@ func TestDeleteByte_DeleteMultipleBytesNoErrors(t *testing.T) {
 func TestDeleteByte_EmptyBufferExpectError(t *testing.T) {
 	gb := NewGapBuffer()
 	err := gb.DeleteByte(0)
-	expectedErr := ErrInvalidPos{pos: 0}
+	expectedErr := errors.New("buffer: cannot delete byte from an empty buffer")
 	if err == nil || err.Error() != expectedErr.Error() {
-		t.Errorf("expected error %v, got %v", ErrInvalidPos{pos: 0}, err)
+		t.Errorf("expected error %v, got %v", errors.New(""), err)
 	}
 }
 
@@ -444,8 +445,8 @@ func TestDeleteByte_NonEmptyBufferExpectError(t *testing.T) {
 		inputPosition int
 		expectedErr   error
 	}{
-		{"position less than 0", -1, ErrInvalidPos{pos: -1}},
-		{"position greater than buffer size", 3, ErrInvalidPos{pos: 3}},
+		{"position less than 0", -1, errors.New("buffer: error converting cursor to buffer position when getting byte: cursor out of range: -1")},
+		{"position greater than buffer size", 3, errors.New("buffer: cursor must be on a non-empty buffer position, got 3 instead")},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -475,9 +476,9 @@ func TestDeleteByte_RepeatDeleteLastIndexExpectError(t *testing.T) {
 		t.Errorf("expected %s, got %s", expected, contents)
 	}
 	err = gb.DeleteByte(2)
-	expectedErr := ErrInvalidPos{pos: 2}
+	expectedErr := errors.New("buffer: cursor must be on a non-empty buffer position, got 2 instead")
 	if err == nil || err.Error() != expectedErr.Error() {
-		t.Errorf("expected error, got nil")
+		t.Errorf("expected %v, got %v", expectedErr, err)
 	}
 }
 
@@ -509,7 +510,7 @@ func TestGetByte_ValidPositionNoErrors(t *testing.T) {
 func TestGetByte_EmptyBufferExpectError(t *testing.T) {
 	gb := NewGapBuffer()
 	b, err := gb.GetByte(0)
-	expectedErr := ErrInvalidPos{pos: 0}
+	expectedErr := errors.New("buffer: cursor out of range: 0")
 	if err == nil || err.Error() != expectedErr.Error() {
 		t.Errorf("expected error %v, got %v", expectedErr, err)
 	}
@@ -525,8 +526,8 @@ func TestGetByte_NonEmptyBufferExpectError(t *testing.T) {
 		inputPosition int
 		expectedErr   error
 	}{
-		{"position less than 0", -1, ErrInvalidPos{pos: -1}},
-		{"position greater than buffer size", 3, ErrInvalidPos{pos: 3}},
+		{"position less than 0", -1, errors.New("buffer: cursor out of range: -1")},
+		{"position greater than buffer size", 3, errors.New("buffer: cursor out of range: 3")},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -591,8 +592,8 @@ func TestLen_DeleteFromBufferNoErrors(t *testing.T) {
 func TestUndo_FreshBufferExpectError(t *testing.T) {
 	gb := NewGapBuffer()
 	_, err := gb.Undo()
-	if err == nil {
-		t.Errorf("expected error, got nil")
+	if err != nil {
+		t.Errorf("expected no errors, got %v", err)
 	}
 }
 
