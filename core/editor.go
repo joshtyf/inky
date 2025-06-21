@@ -7,7 +7,7 @@ import (
 	editorLog "github.com/joshtyf/texteditor/log"
 )
 
-type ReadEditorLines func(start int, n int) ([]string, error)
+type ReadEditorLines func(start int, n int) ([][]byte, error)
 
 type EditorState struct {
 	KeyPressed    *Key
@@ -333,12 +333,12 @@ func (e *Editor) undo() error {
 	return nil
 }
 
-func (e *Editor) readLines(start, n int) ([]string, error) {
+func (e *Editor) readLines(start, n int) ([][]byte, error) {
 	cursor := 0
 	for i := range start {
 		cursor += e.lines[i]
 	}
-	content := make([]string, n)
+	content := make([][]byte, n)
 	for i := 0; i < n && cursor < e.buf.Len(); i++ {
 		nextLine, err := e.buf.SeekToChar(cursor, '\n', 1)
 		if err != nil {
@@ -357,7 +357,7 @@ func (e *Editor) readLines(start, n int) ([]string, error) {
 				severity: CoreErrorSeverityError,
 			}
 		}
-		content[i] = string(data)
+		content[i] = data
 		cursor = nextLine + 1
 	}
 

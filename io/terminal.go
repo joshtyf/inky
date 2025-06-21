@@ -1,6 +1,7 @@
 package io
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"log"
@@ -9,6 +10,10 @@ import (
 
 	"github.com/joshtyf/texteditor/core"
 	editorLog "github.com/joshtyf/texteditor/log"
+	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/renderer"
+	"github.com/yuin/goldmark/util"
 	"golang.org/x/sys/unix"
 	"golang.org/x/term"
 )
@@ -18,6 +23,10 @@ const (
 	cursorHome     = "\033[H"
 	highlightStart = "\033[7m"
 	highlightEnd   = "\033[0m"
+	boldStart      = "\033[1m"
+	boldEnd        = "\033[22m"
+	italicStart    = "\033[3m"
+	italicEnd      = "\033[23m"
 )
 
 const DEFAULT_BUFFER_READ_SIZE = 256
@@ -37,9 +46,10 @@ var defaultMapping = map[string]core.Key{
 }
 
 type TerminalIO struct {
-	top     int
-	mapping map[string]core.Key
-	logger  *log.Logger
+	top            int
+	mapping        map[string]core.Key
+	logger         *log.Logger
+	outputRenderer goldmark.Markdown
 }
 
 func NewTerminalIO() *TerminalIO {
@@ -48,6 +58,15 @@ func NewTerminalIO() *TerminalIO {
 		top:     0,
 		mapping: defaultMapping,
 		logger:  editorLog.CreateLogger("terminalIO"),
+		outputRenderer: goldmark.New(
+			goldmark.WithRenderer(
+				renderer.NewRenderer(
+					renderer.WithNodeRenderers(
+						util.Prioritized(NewTerminalRenderer(), 1000),
+					),
+				),
+			),
+		),
 	}
 }
 
@@ -95,7 +114,13 @@ func (t *TerminalIO) SetDisplay(es *core.EditorState) error {
 		t.logger.Printf("error reading lines: %v", err)
 	}
 	for i := range content {
-		t.writeLine(i, fmt.Sprintf("~ %s", content[i]))
+		// TODO: Use goldmark and create your own terminal renderer
+		var renderedContent bytes.Buffer
+		if err := t.outputRenderer.Convert(content[i], &renderedContent); err != nil {
+			panic(err)
+		}
+
+		t.writeLine(i, fmt.Sprintf("~ %s", &renderedContent))
 	}
 	t.writeLine(h-1, "~end~")
 
@@ -221,4 +246,46 @@ func (t *TerminalIO) listen() (*core.Key, error) {
 		return &core.Key{Code: core.RuneKey, Runes: runes}, nil
 	}
 	return nil, errors.New("no key found")
+}
+
+type TerminalRenderer struct {
+	logger *log.Logger
+}
+
+func NewTerminalRenderer() *TerminalRenderer {
+	return &TerminalRenderer{
+		logger: editorLog.CreateLogger("terminalRenderer"),
+	}
+}
+
+func (t *TerminalRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
+	reg.Register(ast.KindEmphasis, t.renderEmphasis)
+	reg.Register(ast.KindText, t.renderText)
+}
+
+func (t *TerminalRenderer) renderEmphasis(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+	n := node.(*ast.Emphasis)
+	if entering {
+		if n.Level == 1 {
+			_, _ = w.WriteString("*" + italicStart)
+		} else {
+			_, _ = w.WriteString("**" + boldStart)
+		}
+	} else {
+		if n.Level == 1 {
+			_, _ = w.WriteString(italicEnd + "*")
+		} else {
+			_, _ = w.WriteString(boldEnd + "**")
+		}
+	}
+	return ast.WalkContinue, nil
+}
+
+func (t *TerminalRenderer) renderText(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+	if !entering {
+		return ast.WalkContinue, nil
+	}
+	n := node.(*ast.Text)
+	w.Write(n.Segment.Value(source))
+	return ast.WalkContinue, nil
 }
