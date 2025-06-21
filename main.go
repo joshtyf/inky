@@ -9,7 +9,7 @@ import (
 	"syscall"
 
 	"github.com/joshtyf/texteditor/core"
-	"github.com/joshtyf/texteditor/io"
+	io "github.com/joshtyf/texteditor/io/terminal"
 	editorLog "github.com/joshtyf/texteditor/log"
 )
 
@@ -21,7 +21,7 @@ func main() {
 		editorLog.SetDefaultOutput(logFile)
 	}
 
-	editor := core.NewEditor(io.NewTerminalIO(), core.NewGapBuffer())
+	editor := core.NewEditor(io.NewEditorIO(), core.NewGapBuffer())
 	editorCtx, _ := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	if err := editor.Start(editorCtx); err != nil && errors.Is(err, &core.ErrEditorQuit{}) {
 		log.Fatalf("error starting editor: %v", err)

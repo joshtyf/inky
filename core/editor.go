@@ -18,8 +18,8 @@ type EditorState struct {
 }
 
 type EditorIO interface {
-	StartIO() (<-chan *Key, error)
-	SetDisplay(es *EditorState) error
+	Start() (<-chan *Key, error)
+	DisplayEditor(es *EditorState) error
 	Close() error
 }
 
@@ -52,7 +52,7 @@ func (e *Editor) RegisterListener(ch chan<- *EditorState) {
 
 func (e *Editor) Start(ctx context.Context) error {
 	e.logger.Println("starting")
-	inputCh, err := e.io.StartIO()
+	inputCh, err := e.io.Start()
 	if err != nil {
 		e.logger.Printf("error starting input: %s", err)
 		return ErrEditorInternal{
@@ -111,7 +111,7 @@ func (e *Editor) Start(ctx context.Context) error {
 			if coreError, ok := err.(CoreError); ok && coreError.GetSeverity() == CoreErrorSeverityFatal {
 				return coreError
 			}
-			e.io.SetDisplay(
+			e.io.DisplayEditor(
 				&EditorState{
 					KeyPressed:      k,
 					CurrentLine:     e.currentLine,
