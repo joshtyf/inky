@@ -3,13 +3,13 @@ package core
 type Rune []byte
 
 type Buffer interface {
-	InsertByte(b byte, cursor int) error
-	SeekToChar(cursor int, char byte, count int) (int, error)
-	ReverseSeekToChar(cursor int, char byte, count int) (int, error)
-	Read(cursor int, length int) ([]byte, error)
-	Undo() (*ChangeNode, error)
-	DeleteByte(cursor int) error
-	GetByte(cursor int) (byte, error)
+	InsertByte(b byte, cursor int)
+	SeekToChar(cursor int, char byte, count int) int
+	ReverseSeekToChar(cursor int, char byte, count int) int
+	Read(cursor int, length int) []byte
+	Undo() *ChangeNode
+	DeleteByte(cursor int)
+	GetByte(cursor int) byte
 	Len() int
 }
 
