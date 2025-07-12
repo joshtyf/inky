@@ -12,6 +12,7 @@ const (
 	Backspace
 	Undo
 	Newline
+	Save
 )
 
 type Key struct {

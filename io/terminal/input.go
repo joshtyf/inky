@@ -26,6 +26,7 @@ var defaultMapping = keyMapping{
 	"\x7f": {Code: core.Backspace},
 	"\x1f": {Code: core.Undo},
 	"\x0a": {Code: core.Newline},
+	"\x13": {Code: core.Save},
 }
 
 type input struct {
@@ -51,6 +52,7 @@ func (i *input) setup() error {
 		return fmt.Errorf("error getting stdin terminal attributes: %w", err)
 	}
 	termios.Lflag &^= unix.ICANON | unix.ECHO
+	termios.Iflag &^= unix.IXON // Disable flow control for Ctrl+S
 	err = unix.IoctlSetTermios(int(os.Stdin.Fd()), unix.TIOCSETA, termios)
 	if err != nil {
 		return fmt.Errorf("error setting stdin terminal attributes: %w", err)
@@ -58,6 +60,9 @@ func (i *input) setup() error {
 	return nil
 }
 
+// TODO: fix bug when stdin reads multiple keys at once
+// This can happen when the user holds down a key, causing multiple key events to be read
+// Return []*core.Key instead of a single *core.Key
 func (i *input) read() (*core.Key, error) {
 	// Read from stdin
 	var b [default_buffer_read_size]byte
@@ -98,6 +103,7 @@ func (i *input) reset() error {
 		return fmt.Errorf("error getting stdin terminal attributes: %w", err)
 	}
 	termios.Lflag &^= unix.ICANON | unix.ECHO
+	termios.Iflag &^= unix.IXON // Restore flow control for Ctrl+S
 	err = unix.IoctlSetTermios(int(os.Stdin.Fd()), unix.TIOCSETA, termios)
 	if err != nil {
 		return fmt.Errorf("error resetting stdin terminal attributes: %w", err)

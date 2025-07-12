@@ -2,6 +2,8 @@ package core
 
 import (
 	"fmt"
+	"os"
+	"unicode/utf8"
 )
 
 const (
@@ -23,16 +25,6 @@ func NewGapBuffer() *GapBuffer {
 		gapEnd:       DEFAULT_BUFFER_SIZE,
 		latestChange: nil,
 		undoList:     make([]*ChangeNode, 0),
-	}
-}
-
-func NewGapBufferWithContent(content []byte) *GapBuffer {
-	buf := make([]byte, len(content)+DEFAULT_BUFFER_SIZE)
-	copy(buf, content)
-	return &GapBuffer{
-		buffer:   buf,
-		gapStart: len(content),
-		gapEnd:   len(buf),
 	}
 }
 
@@ -173,72 +165,128 @@ func (gb *GapBuffer) Read(cursor int, length int) []byte {
 	return contents
 }
 
-func (gb *GapBuffer) InsertByte(b byte, cursor int) {
-	if gb.getGapSize() == 0 {
-		gb.resizeBuffer(len(gb.buffer) + 1)
+// TODO: deprecate this function
+// func (gb *GapBuffer) InsertByte(b byte, cursor int) {
+// 	if gb.getGapSize() == 0 {
+// 		gb.resizeBuffer(len(gb.buffer) + 1)
+// 	}
+// 	if gb.latestChange == nil || cursor != gb.latestChange.Cursor+gb.latestChange.Length || len(gb.latestChange.Data) > 0 {
+// 		gb.save()
+// 		gb.latestChange = &ChangeNode{
+// 			Cursor: cursor,
+// 			Length: 0,
+// 			Data:   make([]byte, 0),
+// 		}
+// 	}
+// 	pos := gb.cursorToBufferPos(cursor)
+// 	if pos <= gb.gapStart {
+// 		gb.shiftGapStartTo(pos)
+// 	} else {
+// 		gb.shiftGapEndTo(pos)
+// 	}
+// 	gb.buffer[gb.gapStart] = b
+// 	gb.gapStart += 1
+// 	gb.latestChange.Length += 1
+// 	// If inserted byte is a whitespace or newline, we need to save the buffer
+// 	if b == ' ' || b == '\n' {
+// 		gb.save()
+// 		gb.latestChange = &ChangeNode{
+// 			Cursor: cursor + 1, // Next change will start after the inserted byte
+// 			Length: 0,
+// 			Data:   make([]byte, 0),
+// 		}
+// 	}
+// }
+
+func (gb *GapBuffer) InsertRune(r rune, cursor int) {
+	rawBytes := []byte(string(r))
+	if gb.getGapSize() < len(rawBytes) {
+		gb.resizeBuffer(len(gb.buffer) + len(rawBytes))
 	}
-	if gb.latestChange == nil || cursor != gb.latestChange.Cursor+gb.latestChange.Length || len(gb.latestChange.Data) > 0 {
-		gb.save()
-		gb.latestChange = &ChangeNode{
-			Cursor: cursor,
-			Length: 0,
-			Data:   make([]byte, 0),
-		}
-	}
+	// TODO: add undo support for inserting runes
 	pos := gb.cursorToBufferPos(cursor)
 	if pos <= gb.gapStart {
 		gb.shiftGapStartTo(pos)
 	} else {
 		gb.shiftGapEndTo(pos)
 	}
-	gb.buffer[gb.gapStart] = b
-	gb.gapStart += 1
-	gb.latestChange.Length += 1
-	// If inserted byte is a whitespace or newline, we need to save the buffer
-	if b == ' ' || b == '\n' {
-		gb.save()
-		gb.latestChange = &ChangeNode{
-			Cursor: cursor + 1, // Next change will start after the inserted byte
-			Length: 0,
-			Data:   make([]byte, 0),
-		}
+	for i := range rawBytes {
+		gb.buffer[gb.gapStart+i] = rawBytes[i]
 	}
+	gb.gapStart += len(rawBytes)
+	// TODO: handle the case where the inserted rune is a newline
 }
 
-func (gb *GapBuffer) DeleteByte(cursor int) {
+func (gb *GapBuffer) DeleteRune(cursor int) {
 	if gb.Len() == 0 {
-		panic("buffer: cannot delete byte from an empty buffer")
+		panic("buffer: cannot delete rune from an empty buffer")
 	}
 	if cursor >= gb.Len() {
 		panic(fmt.Sprintf("buffer: cursor out of range: %d, buffer length: %d", cursor, gb.Len()))
 	}
-	if gb.latestChange == nil || cursor != gb.latestChange.Cursor-gb.latestChange.Length || len(gb.latestChange.Data) == 0 {
-		gb.save()
-		gb.latestChange = &ChangeNode{
-			Cursor: cursor,
-			Length: 0,
-			Data:   make([]byte, 0),
-		}
-	}
+	// TODO: add undo support for deleting runes
 	pos := gb.cursorToBufferPos(cursor)
 	if pos <= gb.gapStart {
 		gb.shiftGapStartTo(pos)
 	} else {
 		gb.shiftGapEndTo(pos)
 	}
-	byteToDelete := gb.buffer[gb.gapEnd]
-	clear(gb.buffer[gb.gapEnd : gb.gapEnd+1])
-	gb.gapEnd += 1
-	gb.latestChange.Length += 1
-	gb.latestChange.Data = append(gb.latestChange.Data, byteToDelete)
+	r, size := utf8.DecodeRune(gb.buffer[gb.gapEnd:])
+	if r == utf8.RuneError {
+		if size == 1 {
+			panic(fmt.Sprintf("buffer: error decoding rune: invalid byte sequence %v", gb.buffer[gb.gapEnd:]))
+		} else {
+			panic("buffer: error decoding rune: empty byte sequence")
+		}
+	}
+	clear(gb.buffer[gb.gapEnd : gb.gapEnd+size])
+	gb.gapEnd += size
+	// TODO: update the latest change to reflect the deleted rune
 }
 
-func (gb *GapBuffer) GetByte(cursor int) byte {
+// TODO: deprecate this function
+// func (gb *GapBuffer) DeleteByte(cursor int) {
+// 	if gb.Len() == 0 {
+// 		panic("buffer: cannot delete byte from an empty buffer")
+// 	}
+// 	if cursor >= gb.Len() {
+// 		panic(fmt.Sprintf("buffer: cursor out of range: %d, buffer length: %d", cursor, gb.Len()))
+// 	}
+// 	if gb.latestChange == nil || cursor != gb.latestChange.Cursor-gb.latestChange.Length || len(gb.latestChange.Data) == 0 {
+// 		gb.save()
+// 		gb.latestChange = &ChangeNode{
+// 			Cursor: cursor,
+// 			Length: 0,
+// 			Data:   make([]byte, 0),
+// 		}
+// 	}
+// 	pos := gb.cursorToBufferPos(cursor)
+// 	if pos <= gb.gapStart {
+// 		gb.shiftGapStartTo(pos)
+// 	} else {
+// 		gb.shiftGapEndTo(pos)
+// 	}
+// 	byteToDelete := gb.buffer[gb.gapEnd]
+// 	clear(gb.buffer[gb.gapEnd : gb.gapEnd+1])
+// 	gb.gapEnd += 1
+// 	gb.latestChange.Length += 1
+// 	gb.latestChange.Data = append(gb.latestChange.Data, byteToDelete)
+// }
+
+func (gb *GapBuffer) GetRune(cursor int) rune {
 	if cursor < 0 || cursor >= gb.Len() {
 		panic(fmt.Sprintf("buffer: cursor out of range: %d, buffer length: %d", cursor, gb.Len()))
 	}
 	pos := gb.cursorToBufferPos(cursor)
-	return gb.buffer[pos]
+	r, size := utf8.DecodeRune(gb.buffer[pos:])
+	if r == utf8.RuneError {
+		if size == 1 {
+			panic(fmt.Sprintf("buffer: error decoding rune: invalid byte sequence %v", gb.buffer[pos:]))
+		} else {
+			panic("buffer: error decoding rune: empty byte sequence")
+		}
+	}
+	return r
 }
 
 func (gb *GapBuffer) Undo() *ChangeNode {
@@ -281,4 +329,19 @@ func (gb *GapBuffer) Undo() *ChangeNode {
 
 func (gb *GapBuffer) Len() int {
 	return len(gb.buffer) - gb.getGapSize()
+}
+
+func (gb *GapBuffer) WriteTo(w *os.File) (int64, error) {
+	totalWritten := int64(0)
+	n, err := w.Write(gb.buffer[:gb.gapStart])
+	if err != nil {
+		return totalWritten, fmt.Errorf("buffer: error writing to writer: %w", err)
+	}
+	totalWritten += int64(n)
+	n, err = w.Write(gb.buffer[gb.gapEnd:])
+	if err != nil {
+		return totalWritten, fmt.Errorf("buffer: error writing to writer: %w", err)
+	}
+	totalWritten += int64(n)
+	return totalWritten, nil
 }

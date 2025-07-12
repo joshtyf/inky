@@ -3,7 +3,10 @@ package core
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
+	"os"
+	"unicode/utf8"
 
 	editorLog "github.com/joshtyf/texteditor/log"
 )
@@ -18,8 +21,8 @@ type EditorState struct {
 }
 
 type EditorIO interface {
-	Start() (<-chan *Key, error)
-	DisplayEditor(es *EditorState) error
+	Start(*EditorState) (<-chan *Key, error)
+	DisplayEditor(*EditorState) error
 	Close() error
 }
 
@@ -31,10 +34,10 @@ type Editor struct {
 	listeners     []chan<- *EditorState
 	logger        *log.Logger
 	io            EditorIO
+	file          string
 }
 
-func NewEditor(io EditorIO, buf Buffer) *Editor {
-	// TODO: proper initialization with buffer
+func NewEditor(io EditorIO, buf Buffer, file string) *Editor {
 	return &Editor{
 		lines:         make([]int, 1),
 		currentLine:   0,
@@ -43,6 +46,7 @@ func NewEditor(io EditorIO, buf Buffer) *Editor {
 		listeners:     make([]chan<- *EditorState, 0),
 		logger:        editorLog.CreateLogger("editor"),
 		io:            io,
+		file:          file,
 	}
 }
 
@@ -52,7 +56,16 @@ func (e *Editor) RegisterListener(ch chan<- *EditorState) {
 
 func (e *Editor) Start(ctx context.Context) error {
 	e.logger.Println("starting editor")
-	inputCh, err := e.io.Start()
+	err := e.init()
+	if err != nil {
+		return fmt.Errorf("error initialising editor: %w", err)
+	}
+	inputCh, err := e.io.Start(&EditorState{
+		KeyPressed:      nil,
+		CurrentLine:     e.currentLine,
+		CurrentColumn:   e.currentColumn,
+		ReadEditorLines: e.readLines,
+	})
 	if err != nil {
 		return fmt.Errorf("error starting io: %w", err)
 	}
@@ -77,10 +90,7 @@ func (e *Editor) Start(ctx context.Context) error {
 				return ErrEditorQuit{}
 			case RuneKey:
 				for _, r := range k.Runes {
-					data := []byte(string(r))
-					for i := range data {
-						e.insertAtCursor(data[i])
-					}
+					e.insertAtCursor(r)
 				}
 			case ArrowUp:
 				e.moveCursorUp()
@@ -96,6 +106,8 @@ func (e *Editor) Start(ctx context.Context) error {
 				_ = e.backspaceAtCursor()
 			case Undo:
 				e.undo()
+			case Save:
+				_ = e.Save()
 			}
 
 			e.io.DisplayEditor(
@@ -109,6 +121,35 @@ func (e *Editor) Start(ctx context.Context) error {
 		}
 
 	}
+}
+
+func (e *Editor) init() error {
+	f, err := os.OpenFile(e.file, os.O_CREATE|os.O_RDWR, 0666)
+	if err != nil {
+		return fmt.Errorf("error opening file %s: %w", e.file, err)
+	}
+	defer f.Close()
+	content, err := io.ReadAll(f)
+	if err != nil {
+		return fmt.Errorf("error reading file %s: %w", e.file, err)
+	}
+	// Initialize buffer with content
+	for i := 0; i < len(content); i++ {
+		r, size := utf8.DecodeRune(content[i:])
+		if r == utf8.RuneError {
+			if size == 1 {
+				return fmt.Errorf("error decoding rune: invalid byte sequence")
+			} else {
+				return fmt.Errorf("error decoding rune: empty byte sequence")
+			}
+		}
+		e.insertAtCursor(r)
+		i += size - 1
+	}
+	// Reset the cursor to the start
+	e.currentColumn = 0
+	e.currentLine = 0
+	return nil
 }
 
 func (e *Editor) getCursor() int {
@@ -136,6 +177,7 @@ func (e *Editor) setToCursor(cursor int) {
 		panic("editor: cursor position out of bounds")
 	}
 }
+
 func (e *Editor) insertNewLine() {
 	e.lines = append(e.lines, 0)
 	// If inserting a newline, we need to shift all the lines after the current line
@@ -150,13 +192,12 @@ func (e *Editor) insertNewLine() {
 	e.currentColumn = 0
 }
 
-func (e *Editor) insertAtCursor(b byte) {
-	// TODO: change to insert rune?
+func (e *Editor) insertAtCursor(r rune) {
 	cursor := e.getCursor()
-	e.buf.InsertByte(b, cursor)
+	e.buf.InsertRune(r, cursor)
 	e.currentColumn += 1
 	e.lines[e.currentLine] += 1
-	if b == '\n' {
+	if r == '\n' {
 		e.insertNewLine()
 	}
 }
@@ -193,13 +234,13 @@ func (e *Editor) moveCursorDown() {
 	e.currentColumn = min(e.currentColumn, e.lines[e.currentLine])
 }
 
-func (e *Editor) backspaceAtCursor() byte {
+func (e *Editor) backspaceAtCursor() rune {
 	cursor := e.getCursor()
 	if cursor == 0 {
 		return 0
 	}
-	toDelete := e.buf.GetByte(cursor - 1)
-	e.buf.DeleteByte(cursor - 1)
+	runeToBeDeleted := e.buf.GetRune(cursor - 1)
+	e.buf.DeleteRune(cursor - 1)
 
 	if e.currentColumn == 0 {
 		e.lines[e.currentLine-1] += e.lines[e.currentLine]
@@ -210,7 +251,7 @@ func (e *Editor) backspaceAtCursor() byte {
 	}
 	e.currentColumn--
 	e.lines[e.currentLine] -= 1
-	return toDelete
+	return runeToBeDeleted
 }
 
 func (e *Editor) undo() {
@@ -266,6 +307,7 @@ func (e *Editor) undo() {
 	}
 }
 
+// TODO: change return type to rune?
 func (e *Editor) readLines(start, n int) ([][]byte, error) {
 	cursor := 0
 	for i := range start {
@@ -283,6 +325,20 @@ func (e *Editor) readLines(start, n int) ([][]byte, error) {
 	}
 
 	return content, nil
+}
+
+func (e *Editor) Save() error {
+	f, err := os.OpenFile(e.file, os.O_CREATE|os.O_WRONLY, 0666)
+	if err != nil {
+		panic(fmt.Sprintf("error creating file %s while saving: %v", e.file, err))
+	}
+	defer f.Close()
+	bytesWritten, err := e.buf.WriteTo(f)
+	if err != nil {
+		panic(fmt.Sprintf("error writing buffer to file %s while saving: %v", e.file, err))
+	}
+	e.logger.Printf("saved %d bytes to %s\n", bytesWritten, e.file)
+	return nil
 }
 
 type ErrEditorQuit struct{}
