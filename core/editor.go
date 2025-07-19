@@ -332,7 +332,6 @@ func (e *Editor) backspaceAtCursor() rune {
 }
 
 func (e *Editor) undo() {
-	// TODO: Implement undo functionality
 	if len(e.editHistory) == 0 {
 		e.logger.Println("no changes to undo")
 		return
@@ -352,55 +351,6 @@ func (e *Editor) undo() {
 		}
 	}
 	e.editHistory = e.editHistory[:len(e.editHistory)-1]
-	// // Need to update current cursor, current line and current column
-	// // Need to update lines
-	// lastUndo := e.buf.Undo()
-	// if lastUndo == nil {
-	// 	e.logger.Println("no changes to undo")
-	// 	return
-	// }
-	// if len(lastUndo.Data) == 0 {
-	// 	// Reset the current line and column to the last undo cursor
-	// 	e.setToCursor(lastUndo.Cursor)
-	// 	// Calculate the number of lines to shift due to the undo
-	// 	linesToShift := 0
-	// 	for l, c, delta := e.currentLine, e.currentColumn, lastUndo.Length; delta > 0; {
-	// 		// Deduct from the delta from c to the end of the line
-	// 		delta -= e.lines[l] - c
-	// 		// If delta is non-negative and there are more lines, we need to shift
-	// 		if delta >= 0 && l+1 < len(e.lines) {
-	// 			linesToShift++
-	// 			c = 0
-	// 			l++
-	// 		}
-	// 	}
-	// 	if linesToShift > 0 {
-	// 		// Recalculate the length of the current line after shifting
-	// 		for i := 1; i <= linesToShift; i++ {
-	// 			e.lines[e.currentLine] += e.lines[e.currentLine+i]
-	// 		}
-	// 		// Perform the shifting
-	// 		// Safe to index cm.currentLine+1 since a non-zero linesToShift indicates
-	// 		// that there is at least one line after the current line
-	// 		copy(e.lines[e.currentLine+1:], e.lines[e.currentLine+linesToShift+1:])
-	// 		// Remove the lines that were shifted
-	// 		e.lines = e.lines[:len(e.lines)-linesToShift]
-	// 	}
-	// 	e.lines[e.currentLine] -= lastUndo.Length
-	// } else {
-	// 	// Reset the current line and column to the last undo cursor
-	// 	e.setToCursor(lastUndo.Cursor - lastUndo.Length + 1)
-
-	// 	// Reshift the lines
-	// 	// Iterate in reverse order since lastUndo.Data is reversed
-	// 	for i := len(lastUndo.Data) - 1; i >= 0; i-- {
-	// 		e.lines[e.currentLine] += 1
-	// 		e.currentColumn += 1
-	// 		if lastUndo.Data[i] == '\n' {
-	// 			e.insertNewLine()
-	// 		}
-	// 	}
-	// }
 }
 
 // TODO: change return type to rune?
