@@ -11,20 +11,16 @@ const (
 )
 
 type GapBuffer struct {
-	buffer       []byte
-	gapStart     int
-	gapEnd       int
-	latestChange *ChangeNode
-	undoList     []*ChangeNode
+	buffer   []byte
+	gapStart int
+	gapEnd   int
 }
 
 func NewGapBuffer() *GapBuffer {
 	return &GapBuffer{
-		buffer:       make([]byte, DEFAULT_BUFFER_SIZE),
-		gapStart:     0,
-		gapEnd:       DEFAULT_BUFFER_SIZE,
-		latestChange: nil,
-		undoList:     make([]*ChangeNode, 0),
+		buffer:   make([]byte, DEFAULT_BUFFER_SIZE),
+		gapStart: 0,
+		gapEnd:   DEFAULT_BUFFER_SIZE,
 	}
 }
 
@@ -90,16 +86,6 @@ func (gb *GapBuffer) resizeBuffer(requiredSize int) {
 	copy(newBuf[len(newBuf)-sizeOfRight:], gb.buffer[gb.gapEnd:])
 	gb.buffer = newBuf
 	gb.gapEnd = len(newBuf) - sizeOfRight
-}
-
-func (gb *GapBuffer) save() {
-	if gb.latestChange != nil {
-		if len(gb.latestChange.Data) > 0 && len(gb.latestChange.Data) != gb.latestChange.Length {
-			panic(fmt.Sprintf("buffer: save data length mismatch: expected %d, got %d instead", len(gb.latestChange.Data), gb.latestChange.Length))
-		}
-		gb.undoList = append(gb.undoList, gb.latestChange)
-		gb.latestChange = nil
-	}
 }
 
 func (gb *GapBuffer) SeekToChar(cursor int, char byte, count int) int {
@@ -217,7 +203,7 @@ func (gb *GapBuffer) InsertRune(r rune, cursor int) {
 	// TODO: handle the case where the inserted rune is a newline
 }
 
-func (gb *GapBuffer) DeleteRune(cursor int) {
+func (gb *GapBuffer) DeleteRune(cursor int) rune {
 	if gb.Len() == 0 {
 		panic("buffer: cannot delete rune from an empty buffer")
 	}
@@ -241,7 +227,7 @@ func (gb *GapBuffer) DeleteRune(cursor int) {
 	}
 	clear(gb.buffer[gb.gapEnd : gb.gapEnd+size])
 	gb.gapEnd += size
-	// TODO: update the latest change to reflect the deleted rune
+	return r
 }
 
 // TODO: deprecate this function
@@ -287,44 +273,6 @@ func (gb *GapBuffer) GetRune(cursor int) rune {
 		}
 	}
 	return r
-}
-
-func (gb *GapBuffer) Undo() *ChangeNode {
-	// TODO: check if undo will be affected by buffer resize (I don't think so)
-	// Save the current state before undoing
-	gb.save()
-	if len(gb.undoList) == 0 {
-		return nil
-	}
-	lastUndo := gb.undoList[len(gb.undoList)-1]
-	gb.undoList = gb.undoList[:len(gb.undoList)-1]
-	var undoPos int
-	if len(lastUndo.Data) > 0 {
-		// Seek to the position of the last deleted byte
-		undoPos = gb.cursorToBufferPos(lastUndo.Cursor - lastUndo.Length + 1)
-	} else {
-		// Seek to the position of the first inserted byte
-		undoPos = gb.cursorToBufferPos(lastUndo.Cursor)
-	}
-	if undoPos <= gb.gapStart {
-		gb.shiftGapStartTo(undoPos)
-	} else {
-		gb.shiftGapEndTo(undoPos)
-	}
-	if len(lastUndo.Data) > 0 {
-		// lastUndo.Data needs to inserted in reverse order
-		for i := len(lastUndo.Data) - 1; i >= 0; i-- {
-			gb.buffer[gb.gapStart] = lastUndo.Data[i]
-			gb.gapStart += 1
-		}
-	} else {
-		// Delete the bytes of the last undo
-		// First shift the gap so that gap end is at the start of the last undo
-		clear(gb.buffer[gb.gapEnd : gb.gapEnd+lastUndo.Length])
-		gb.gapEnd += lastUndo.Length
-	}
-	gb.latestChange = nil
-	return lastUndo
 }
 
 func (gb *GapBuffer) Len() int {
