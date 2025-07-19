@@ -305,7 +305,10 @@ func (e *Editor) moveCursorLeft() {
 }
 
 func (e *Editor) moveCursorUp() {
-	e.currentLine = max(e.currentLine-1, 0)
+	if e.currentLine == 0 {
+		return
+	}
+	e.currentLine = e.currentLine - 1
 	e.currentColumn = min(e.currentColumn, e.lines[e.currentLine]-1)
 }
 
