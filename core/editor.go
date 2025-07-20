@@ -107,10 +107,8 @@ func (e *Editor) Start(ctx context.Context) error {
 				e.logger.Println("Ctrl+D pressed, stopping editor")
 				return ErrEditorQuit{}
 			case RuneKey:
-				for _, r := range k.Runes {
-					e.updateEditHistory(InsertOp, r)
-					e.insertAtCursor(r)
-				}
+				e.updateEditHistory(InsertOp, k.Rune)
+				e.insertAtCursor(k.Rune)
 			case ArrowUp:
 				e.moveCursorUp()
 			case ArrowDown:

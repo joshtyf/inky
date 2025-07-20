@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/joshtyf/texteditor/core"
@@ -46,7 +47,7 @@ func newInput(l *log.Logger, m *keyMapping) *input {
 	return i
 }
 
-func (i *input) setup() error {
+func (in *input) setup() error {
 	termios, err := unix.IoctlGetTermios(int(os.Stdin.Fd()), unix.TIOCGETA)
 	if err != nil {
 		return fmt.Errorf("error getting stdin terminal attributes: %w", err)
@@ -60,40 +61,47 @@ func (i *input) setup() error {
 	return nil
 }
 
-// TODO: fix bug when stdin reads multiple keys at once
-// This can happen when the user holds down a key, causing multiple key events to be read
-// Return []*core.Key instead of a single *core.Key
-func (i *input) read() (*core.Key, error) {
-	// Read from stdin
+func (in *input) parseSpecialSequences(b []byte) (*core.Key, int) {
+	bufstr := string(b)
+	for k, v := range in.mapping {
+		if strings.HasPrefix(bufstr, k) {
+			return &v, len(k)
+		}
+	}
+	return nil, 0
+}
+
+func (in *input) read() ([]*core.Key, error) {
 	var b [default_buffer_read_size]byte
 	n, err := os.Stdin.Read(b[:])
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error reading from stdin: %w", err)
 	}
+	keys := make([]*core.Key, 0)
+	for i := 0; i < n; i++ {
+		k, size := in.parseSpecialSequences(b[i:])
+		if k == nil && b[i] == 0x1b {
+			// Unrecognized escape sequence
+			return nil, fmt.Errorf("unrecognized escape sequence: %s", string(b[i:]))
+		} else if k != nil {
+			keys = append(keys, k)
+			i += size - 1 // Move to the next character after the escape sequence
+			continue
+		}
 
-	if k, ok := i.mapping[string(b[:n])]; ok {
-		return &k, nil
-	}
-
-	runes := make([]rune, 0)
-	for j := 0; j < n; j++ {
-		r, size := utf8.DecodeRune(b[j:])
+		// If we reach here, then we try to decode the bytes as a rune
+		r, size := utf8.DecodeRune(b[i:])
 		if r == utf8.RuneError {
 			if size == 1 {
-				return nil, fmt.Errorf("error decoding rune: invalid byte sequence %v", b[j:])
+				return nil, fmt.Errorf("error decoding rune: invalid byte sequence %v", b[i:])
 			} else {
 				return nil, fmt.Errorf("error decoding rune: empty byte sequence")
 			}
 		}
-		runes = append(runes, r)
-		j += size - 1
+		keys = append(keys, &core.Key{Code: core.RuneKey, Rune: r})
+		i += size - 1 // Move to the next sequence
 	}
-
-	if len(runes) > 0 {
-		return &core.Key{Code: core.RuneKey, Runes: runes}, nil
-	} else {
-		panic("error reading from stdin: unable to create a key from input")
-	}
+	return keys, nil
 }
 
 func (i *input) reset() error {

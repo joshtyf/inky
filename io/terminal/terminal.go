@@ -38,11 +38,13 @@ func (io *EditorIO) Start(es *core.EditorState) (<-chan *core.Key, error) {
 		defer close(inputCh)
 
 		for {
-			k, err := io.input.read()
+			keys, err := io.input.read()
 			if err != nil {
 				panic(fmt.Sprintf("error reading input: %v", err))
 			}
-			inputCh <- k
+			for _, k := range keys {
+				inputCh <- k
+			}
 		}
 	}()
 	return inputCh, nil

@@ -16,6 +16,6 @@ const (
 )
 
 type Key struct {
-	Code  KeyCode
-	Runes []rune
+	Code KeyCode
+	Rune rune
 }
