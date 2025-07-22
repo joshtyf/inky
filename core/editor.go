@@ -372,7 +372,7 @@ func (e *Editor) readLines(start, n int) ([][]byte, error) {
 }
 
 func (e *Editor) Save() error {
-	f, err := os.OpenFile(e.file, os.O_CREATE|os.O_WRONLY, 0666)
+	f, err := os.OpenFile(e.file, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
 	if err != nil {
 		panic(fmt.Sprintf("error creating file %s while saving: %v", e.file, err))
 	}
