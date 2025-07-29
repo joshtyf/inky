@@ -23,7 +23,7 @@ type EditorState struct {
 }
 
 type EditorIO interface {
-	Start(*EditorState) (<-chan *Key, error)
+	Start() (<-chan *Key, error)
 	DisplayEditor(*EditorState) error
 	Close() error
 }
@@ -84,14 +84,7 @@ func (e *Editor) Start(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("error initialising editor: %w", err)
 	}
-	inputCh, err := e.io.Start(&EditorState{
-		KeyPressed:      nil,
-		CurrentLine:     e.currentLine,
-		CurrentColumn:   e.currentColumn,
-		ReadEditorLines: e.readLines,
-		EditorSaved:     true,
-		CharCount:       e.charCount,
-	})
+	inputCh, err := e.io.Start()
 	if err != nil {
 		return fmt.Errorf("error starting io: %w", err)
 	}
@@ -101,22 +94,33 @@ func (e *Editor) Start(ctx context.Context) error {
 		}
 	}()
 
+	var keyPressed *Key
 	for {
+		e.io.DisplayEditor(
+			&EditorState{
+				KeyPressed:      keyPressed,
+				CurrentLine:     e.currentLine,
+				CurrentColumn:   e.currentColumn,
+				ReadEditorLines: e.readLines,
+				EditorSaved:     e.saved,
+				CharCount:       e.charCount,
+			},
+		)
 		select {
 		case <-ctx.Done():
 			e.logger.Println("editor stopped")
 			return ErrEditorQuit{}
-		case k := <-inputCh:
-			if k == nil {
+		case keyPressed = <-inputCh:
+			if keyPressed == nil {
 				return fmt.Errorf("input channel closed unexpectedly")
 			}
-			switch k.Code {
+			switch keyPressed.Code {
 			case CtrlD:
 				e.logger.Println("Ctrl+D pressed, stopping editor")
 				return ErrEditorQuit{}
 			case RuneKey:
-				e.updateEditHistory(InsertOp, k.Rune)
-				e.insertAtCursor(k.Rune)
+				e.updateEditHistory(InsertOp, keyPressed.Rune)
+				e.insertAtCursor(keyPressed.Rune)
 			case ArrowUp:
 				e.moveCursorUp()
 			case ArrowDown:
@@ -136,19 +140,7 @@ func (e *Editor) Start(ctx context.Context) error {
 			case Save:
 				_ = e.Save()
 			}
-
-			e.io.DisplayEditor(
-				&EditorState{
-					KeyPressed:      k,
-					CurrentLine:     e.currentLine,
-					CurrentColumn:   e.currentColumn,
-					ReadEditorLines: e.readLines,
-					EditorSaved:     e.saved,
-					CharCount:       e.charCount,
-				},
-			)
 		}
-
 	}
 }
 

@@ -27,9 +27,8 @@ func NewEditorIO() *EditorIO {
 	}
 }
 
-func (io *EditorIO) Start(es *core.EditorState) (<-chan *core.Key, error) {
-	io.setup()
-	err := io.DisplayEditor(es)
+func (io *EditorIO) Start() (<-chan *core.Key, error) {
+	err := io.setup()
 	if err != nil {
 		return nil, fmt.Errorf("error initialising editor io: %w", err)
 	}
