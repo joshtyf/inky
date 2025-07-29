@@ -21,6 +21,7 @@ var defaultMapping = keyMapping{
 	"\x1b[B": {Code: core.ArrowDown},
 	"\x1b[D": {Code: core.ArrowLeft},
 	"\x1b[C": {Code: core.ArrowRight},
+	// "\x1b":   {Code: core.Escape}, // Must be kept last to handle escape sequences
 
 	// Control Keys
 	"\x04": {Code: core.CtrlD},

@@ -17,6 +17,8 @@ type EditorState struct {
 	KeyPressed    *Key
 	CurrentLine   int
 	CurrentColumn int
+	EditorSaved   bool
+	CharCount     int
 	ReadEditorLines
 }
 
@@ -52,6 +54,8 @@ type Editor struct {
 	io            EditorIO
 	file          string
 	editHistory   []*EditOp // TODO: Limit the size of the history
+	saved         bool
+	charCount     int
 }
 
 func NewEditor(io EditorIO, buf Buffer, file string) *Editor {
@@ -65,6 +69,8 @@ func NewEditor(io EditorIO, buf Buffer, file string) *Editor {
 		io:            io,
 		file:          file,
 		editHistory:   make([]*EditOp, 0),
+		saved:         true,
+		charCount:     0,
 	}
 }
 
@@ -83,6 +89,8 @@ func (e *Editor) Start(ctx context.Context) error {
 		CurrentLine:     e.currentLine,
 		CurrentColumn:   e.currentColumn,
 		ReadEditorLines: e.readLines,
+		EditorSaved:     true,
+		CharCount:       e.charCount,
 	})
 	if err != nil {
 		return fmt.Errorf("error starting io: %w", err)
@@ -135,6 +143,8 @@ func (e *Editor) Start(ctx context.Context) error {
 					CurrentLine:     e.currentLine,
 					CurrentColumn:   e.currentColumn,
 					ReadEditorLines: e.readLines,
+					EditorSaved:     e.saved,
+					CharCount:       e.charCount,
 				},
 			)
 		}
@@ -226,6 +236,7 @@ func (e *Editor) insertAtCursor(r rune) {
 	e.buf.InsertRune(r, cursor)
 	e.currentColumn += 1
 	e.lines[e.currentLine] += 1
+	e.charCount++
 	if r == '\n' {
 		e.updateEditorLines(InsertOp)
 	}
@@ -258,6 +269,7 @@ func (e *Editor) updateEditHistory(op EditOpType, r rune) {
 			lastEdit.StartLineColumn--
 		}
 	}
+	e.saved = false
 }
 
 func (e *Editor) newEditNodeRequired(op EditOpType) bool {
@@ -326,6 +338,7 @@ func (e *Editor) backspaceAtCursor() rune {
 	}
 	e.currentColumn--
 	e.lines[e.currentLine] -= 1
+	e.charCount--
 	return deletedRune
 }
 
@@ -382,6 +395,7 @@ func (e *Editor) Save() error {
 		panic(fmt.Sprintf("error writing buffer to file %s while saving: %v", e.file, err))
 	}
 	e.logger.Printf("saved %d bytes to %s\n", bytesWritten, e.file)
+	e.saved = true
 	return nil
 }
 

@@ -13,6 +13,7 @@ const (
 	Undo
 	Newline
 	Save
+	Escape
 )
 
 type Key struct {

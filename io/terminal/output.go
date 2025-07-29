@@ -108,7 +108,22 @@ func (o *output) writeLine(line int, content []byte) error {
 	}
 	fmt.Print(restoreCursor)
 	return nil
+}
 
+func (o *output) writeRawLine(line int, content string) error {
+	_, h, err := term.GetSize(int(os.Stdout.Fd()))
+	if err != nil {
+		return fmt.Errorf("error getting terminal size: %w", err)
+	}
+	if line >= h {
+		return fmt.Errorf("line %d is out of bounds for terminal height %d", line, h)
+	}
+	fmt.Print(saveCursor)
+	fmt.Print(getGoToLineEscapeSequence(line))
+	fmt.Print(eraseEntireLine)
+	fmt.Print(content)
+	fmt.Print(restoreCursor)
+	return nil
 }
 
 type terminalMarkdownRenderer struct{}

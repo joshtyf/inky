@@ -69,9 +69,19 @@ func (io *EditorIO) DisplayEditor(es *core.EditorState) error {
 	for i := range content {
 		io.output.writeLine(i, content[i])
 	}
-
+	io.writeStatusLine(h-1, es)
 	io.output.moveCursor(es.CurrentLine-io.top, es.CurrentColumn)
 	return nil
+}
+
+func (io *EditorIO) writeStatusLine(line int, es *core.EditorState) {
+	status := fmt.Sprintf("Char Count: %d | Line: %d, Column: %d | Saved: %t",
+		es.CharCount,
+		es.CurrentLine+1,
+		es.CurrentColumn+1,
+		es.EditorSaved,
+	)
+	io.output.writeRawLine(line, status)
 }
 
 func (io *EditorIO) setup() error {
