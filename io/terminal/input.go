@@ -16,12 +16,12 @@ const default_buffer_read_size = 256
 type keyMapping map[string]core.Key
 
 var defaultMapping = keyMapping{
-	// Arrow Keys
+	// Escape Sequences
 	"\x1b[A": {Code: core.ArrowUp},
 	"\x1b[B": {Code: core.ArrowDown},
 	"\x1b[D": {Code: core.ArrowLeft},
 	"\x1b[C": {Code: core.ArrowRight},
-	// "\x1b":   {Code: core.Escape}, // Must be kept last to handle escape sequences
+	"\x1b":   {Code: core.Escape},
 
 	// Control Keys
 	"\x04": {Code: core.CtrlD},
@@ -64,12 +64,20 @@ func (in *input) setup() error {
 
 func (in *input) parseSpecialSequences(b []byte) (*core.Key, int) {
 	bufstr := string(b)
+	var matchedKey *core.Key
+	matchedKeySize := 0
 	for k, v := range in.mapping {
-		if strings.HasPrefix(bufstr, k) {
-			return &v, len(k)
+		predicateLen := len(k)
+		if len(bufstr) < predicateLen {
+			continue
+		}
+		// Longest prefix match
+		if strings.HasPrefix(bufstr, k) && matchedKeySize < predicateLen {
+			matchedKey = &v
+			matchedKeySize = predicateLen
 		}
 	}
-	return nil, 0
+	return matchedKey, matchedKeySize
 }
 
 func (in *input) read() ([]*core.Key, error) {
@@ -81,10 +89,7 @@ func (in *input) read() ([]*core.Key, error) {
 	keys := make([]*core.Key, 0)
 	for i := 0; i < n; i++ {
 		k, size := in.parseSpecialSequences(b[i:])
-		if k == nil && b[i] == 0x1b {
-			// Unrecognized escape sequence
-			return nil, fmt.Errorf("unrecognized escape sequence: %s", string(b[i:]))
-		} else if k != nil {
+		if k != nil {
 			keys = append(keys, k)
 			i += size - 1 // Move to the next character after the escape sequence
 			continue
