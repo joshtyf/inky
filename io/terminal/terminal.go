@@ -5,7 +5,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/joshtyf/texteditor/core"
+	editorIO "github.com/joshtyf/texteditor/io"
 	editorLog "github.com/joshtyf/texteditor/log"
 	"golang.org/x/term"
 )
@@ -27,12 +27,12 @@ func NewEditorIO() *EditorIO {
 	}
 }
 
-func (io *EditorIO) Start() (<-chan *core.Key, error) {
+func (io *EditorIO) Start() (<-chan *editorIO.Key, error) {
 	err := io.setup()
 	if err != nil {
 		return nil, fmt.Errorf("error initialising editor io: %w", err)
 	}
-	inputCh := make(chan *core.Key)
+	inputCh := make(chan *editorIO.Key)
 	go func() {
 		defer close(inputCh)
 
@@ -49,7 +49,7 @@ func (io *EditorIO) Start() (<-chan *core.Key, error) {
 	return inputCh, nil
 }
 
-func (io *EditorIO) DisplayEditor(es *core.EditorState) error {
+func (io *EditorIO) DisplayEditor(es *editorIO.EditorState) error {
 	_, h, err := term.GetSize(int(os.Stdout.Fd()))
 	if err != nil {
 		return fmt.Errorf("error getting terminal size for display: %w", err)
@@ -73,7 +73,7 @@ func (io *EditorIO) DisplayEditor(es *core.EditorState) error {
 	return nil
 }
 
-func (io *EditorIO) writeStatusLine(line int, es *core.EditorState) {
+func (io *EditorIO) writeStatusLine(line int, es *editorIO.EditorState) {
 	status := fmt.Sprintf("Char Count: %d | Line: %d, Column: %d | Saved: %t",
 		es.CharCount,
 		es.CurrentLine+1,

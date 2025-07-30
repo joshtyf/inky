@@ -8,25 +8,9 @@ import (
 	"os"
 	"unicode/utf8"
 
+	editorIO "github.com/joshtyf/texteditor/io"
 	editorLog "github.com/joshtyf/texteditor/log"
 )
-
-type ReadEditorLines func(start int, n int) ([][]byte, error)
-
-type EditorState struct {
-	KeyPressed    *Key
-	CurrentLine   int
-	CurrentColumn int
-	EditorSaved   bool
-	CharCount     int
-	ReadEditorLines
-}
-
-type EditorIO interface {
-	Start() (<-chan *Key, error)
-	DisplayEditor(*EditorState) error
-	Close() error
-}
 
 type EditOpType int
 
@@ -49,22 +33,20 @@ type Editor struct {
 	currentLine   int
 	currentColumn int
 	buf           Buffer
-	listeners     []chan<- *EditorState
 	logger        *log.Logger
-	io            EditorIO
+	io            editorIO.EditorIO
 	file          string
 	editHistory   []*EditOp // TODO: Limit the size of the history
 	saved         bool
 	charCount     int
 }
 
-func NewEditor(io EditorIO, buf Buffer, file string) *Editor {
+func NewEditor(io editorIO.EditorIO, buf Buffer, file string) *Editor {
 	return &Editor{
 		lines:         make([]int, 1),
 		currentLine:   0,
 		currentColumn: 0,
 		buf:           buf,
-		listeners:     make([]chan<- *EditorState, 0),
 		logger:        editorLog.CreateLogger("editor"),
 		io:            io,
 		file:          file,
@@ -72,10 +54,6 @@ func NewEditor(io EditorIO, buf Buffer, file string) *Editor {
 		saved:         true,
 		charCount:     0,
 	}
-}
-
-func (e *Editor) RegisterListener(ch chan<- *EditorState) {
-	e.listeners = append(e.listeners, ch)
 }
 
 func (e *Editor) Start(ctx context.Context) error {
@@ -94,10 +72,10 @@ func (e *Editor) Start(ctx context.Context) error {
 		}
 	}()
 
-	var keyPressed *Key
+	var keyPressed *editorIO.Key
 	for {
 		e.io.DisplayEditor(
-			&EditorState{
+			&editorIO.EditorState{
 				KeyPressed:      keyPressed,
 				CurrentLine:     e.currentLine,
 				CurrentColumn:   e.currentColumn,
@@ -115,29 +93,29 @@ func (e *Editor) Start(ctx context.Context) error {
 				return fmt.Errorf("input channel closed unexpectedly")
 			}
 			switch keyPressed.Code {
-			case CtrlD:
+			case editorIO.CtrlD:
 				e.logger.Println("Ctrl+D pressed, stopping editor")
 				return ErrEditorQuit{}
-			case RuneKey:
+			case editorIO.RuneKey:
 				e.updateEditHistory(InsertOp, keyPressed.Rune)
 				e.insertAtCursor(keyPressed.Rune)
-			case ArrowUp:
+			case editorIO.ArrowUp:
 				e.moveCursorUp()
-			case ArrowDown:
+			case editorIO.ArrowDown:
 				e.moveCursorDown()
-			case ArrowLeft:
+			case editorIO.ArrowLeft:
 				e.moveCursorLeft()
-			case ArrowRight:
+			case editorIO.ArrowRight:
 				e.moveCursorRight()
-			case Newline:
+			case editorIO.Newline:
 				e.updateEditHistory(InsertOp, '\n')
 				e.insertAtCursor('\n')
-			case Backspace:
+			case editorIO.Backspace:
 				deletedRune := e.backspaceAtCursor()
 				e.updateEditHistory(DeleteOp, deletedRune)
-			case Undo:
+			case editorIO.Undo:
 				e.undo()
-			case Save:
+			case editorIO.Save:
 				_ = e.Save()
 			}
 		}

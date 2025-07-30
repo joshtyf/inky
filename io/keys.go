@@ -1,4 +1,4 @@
-package core
+package io
 
 type KeyCode int
 
