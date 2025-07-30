@@ -4,26 +4,40 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	editorIO "github.com/joshtyf/texteditor/io"
 	editorLog "github.com/joshtyf/texteditor/log"
+	"github.com/spf13/viper"
 	"golang.org/x/term"
 )
 
-type EditorIO struct {
-	top    int
-	logger *log.Logger
-	input  *input
-	output *output
+func setDefaultConfig(conf *viper.Viper) {
+	if conf == nil {
+		conf = viper.New()
+	}
+	conf.SetDefault("showCharCount", true)
+	// TODO: create key mapping for terminal input
 }
 
-func NewEditorIO() *EditorIO {
+type EditorIO struct {
+	top           int
+	logger        *log.Logger
+	input         *input
+	output        *output
+	showCharCount bool
+}
+
+func NewEditorIO(globalConf *viper.Viper) *EditorIO {
 	logger := editorLog.CreateLogger("terminalIO")
+	conf := globalConf.Sub("terminal")
+	setDefaultConfig(conf)
 	return &EditorIO{
-		top:    0,
-		logger: logger,
-		input:  newInput(logger, nil),
-		output: newOutput(logger),
+		top:           0,
+		logger:        logger,
+		input:         newInput(logger, nil),
+		output:        newOutput(logger),
+		showCharCount: conf.GetBool("showCharCount"),
 	}
 }
 
@@ -74,12 +88,14 @@ func (io *EditorIO) DisplayEditor(es *editorIO.EditorState) error {
 }
 
 func (io *EditorIO) writeStatusLine(line int, es *editorIO.EditorState) {
-	status := fmt.Sprintf("Char Count: %d | Line: %d, Column: %d | Saved: %t",
-		es.CharCount,
-		es.CurrentLine+1,
-		es.CurrentColumn+1,
-		es.EditorSaved,
-	)
+	statusConf := []string{}
+	if io.showCharCount {
+		statusConf = append(statusConf, fmt.Sprintf("Char Count %d", es.CharCount))
+	}
+	statusConf = append(statusConf, fmt.Sprintf("Line %d, Column %d", es.CurrentLine+1, es.CurrentColumn+1))
+	statusConf = append(statusConf, fmt.Sprintf("Saved: %t", es.EditorSaved))
+	status := strings.Join(statusConf, " | ")
+
 	io.output.writeRawLine(line, status)
 }
 
