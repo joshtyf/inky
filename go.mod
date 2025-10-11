@@ -7,7 +7,6 @@ require golang.org/x/sys v0.32.0
 require golang.org/x/term v0.31.0
 
 require (
-	github.com/maxence-charriere/go-app/v10 v10.1.4
 	github.com/spf13/viper v1.20.1
 	github.com/yuin/goldmark v1.7.12
 )
@@ -15,7 +14,6 @@ require (
 require (
 	github.com/fsnotify/fsnotify v1.8.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.2.1 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.3 // indirect
 	github.com/sagikazarmark/locafero v0.7.0 // indirect
 	github.com/sourcegraph/conc v0.3.0 // indirect

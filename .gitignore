@@ -1,3 +1,2 @@
 *.log
-web/app.wasm
 **/.DS_Store

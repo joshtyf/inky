@@ -10,7 +10,7 @@ import (
 	"syscall"
 
 	"github.com/joshtyf/texteditor/core"
-	webIO "github.com/joshtyf/texteditor/io/web"
+	terminalIO "github.com/joshtyf/texteditor/io/terminal"
 	editorLog "github.com/joshtyf/texteditor/log"
 	"github.com/spf13/viper"
 )
@@ -41,7 +41,7 @@ func main() {
 		editorLog.SetDefaultOutput(logFile)
 	}
 	// TODO: check that the sub config exists
-	editorIO := webIO.NewEditorIO(config)
+	editorIO := terminalIO.NewEditorIO(config)
 	buffer := core.NewGapBuffer()
 	editor := core.NewEditor(editorIO, buffer, file)
 	editorCtx, _ := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
