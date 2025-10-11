@@ -68,7 +68,6 @@ func (io *EditorIO) DisplayEditor(es *editorIO.EditorState) error {
 	if err != nil {
 		return fmt.Errorf("error getting terminal size for display: %w", err)
 	}
-	io.output.clearScreen()
 	// Reposition screen to match editor view
 	if es.CurrentLine < io.top {
 		io.top = es.CurrentLine
