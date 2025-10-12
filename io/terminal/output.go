@@ -82,8 +82,22 @@ func (o *output) moveCursorToHome() error {
 }
 
 func (o *output) moveCursor(line, column int) error {
-	fmt.Printf("\033[%d;%dH", line+1, column+3)
+	// fmt.Printf("\033[%d;%dH", line+1, column+3)
+	fmt.Printf("\033[%d;%dH", line+1, column+1)
 	return nil
+}
+
+func (o *output) writeData(content []byte) error {
+	var renderedContent bytes.Buffer
+	if err := o.mdRenderer.Convert(content, &renderedContent); err != nil {
+		return fmt.Errorf("error rendering markdown from content: %w", err)
+	}
+	fmt.Print(cursorHome)
+	_, err := renderedContent.WriteTo(os.Stdout)
+	if err != nil {
+		return fmt.Errorf("error writing rendered content to stdout: %w", err)
+	}
+	return err
 }
 
 func (o *output) writeLine(line int, content []byte) error {
@@ -161,5 +175,8 @@ func (t *terminalMarkdownRenderer) renderText(w util.BufWriter, source []byte, n
 	}
 	n := node.(*ast.Text)
 	w.Write(n.Segment.Value(source))
+	if n.SoftLineBreak() || n.HardLineBreak() {
+		w.WriteRune('\n')
+	}
 	return ast.WalkContinue, nil
 }
