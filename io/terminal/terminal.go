@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	editorIO "github.com/joshtyf/texteditor/io"
+	"github.com/joshtyf/texteditor/core"
 	editorLog "github.com/joshtyf/texteditor/log"
 	"github.com/spf13/viper"
 	"golang.org/x/term"
@@ -20,12 +20,20 @@ func setDefaultConfig(conf *viper.Viper) {
 	// TODO: create key mapping for terminal input
 }
 
+type Selection struct {
+	anchorLine   int
+	anchorColumn int
+	focusLine    int
+	focusColumn  int
+}
+
 type EditorIO struct {
 	top           int
 	logger        *log.Logger
 	input         *input
 	output        *output
 	showCharCount bool
+	selection     *Selection
 }
 
 func NewEditorIO(globalConf *viper.Viper) *EditorIO {
@@ -38,15 +46,21 @@ func NewEditorIO(globalConf *viper.Viper) *EditorIO {
 		input:         newInput(logger, nil),
 		output:        newOutput(logger),
 		showCharCount: conf.GetBool("showCharCount"),
+		selection: &Selection{
+			anchorLine:   0,
+			anchorColumn: 0,
+			focusLine:    0,
+			focusColumn:  0,
+		},
 	}
 }
 
-func (io *EditorIO) Start() (<-chan *editorIO.Key, error) {
+func (io *EditorIO) Start() (<-chan *core.Key, error) {
 	err := io.setup()
 	if err != nil {
 		return nil, fmt.Errorf("error initialising editor io: %w", err)
 	}
-	inputCh := make(chan *editorIO.Key)
+	inputCh := make(chan *core.Key)
 	go func() {
 		defer close(inputCh)
 
@@ -63,7 +77,20 @@ func (io *EditorIO) Start() (<-chan *editorIO.Key, error) {
 	return inputCh, nil
 }
 
-func (io *EditorIO) DisplayEditor(es *editorIO.EditorState) error {
+func (io *EditorIO) DisplayEditor(es *core.EditorState) error {
+	// Selection
+	// TODO: update if this is wrong
+	if es.KeyPressed != nil &&
+		es.KeyPressed.Code != core.ShiftArrowUp &&
+		es.KeyPressed.Code != core.ShiftArrowDown &&
+		es.KeyPressed.Code != core.ShiftArrowLeft && es.KeyPressed.Code != core.ShiftArrowRight {
+		io.selection.anchorLine = es.CurrentLine
+		io.selection.anchorColumn = es.CurrentColumn
+	}
+	io.selection.focusLine = es.CurrentLine
+	io.selection.focusColumn = es.CurrentColumn
+	io.logger.Println(io.selection)
+
 	_, h, err := term.GetSize(int(os.Stdout.Fd()))
 	if err != nil {
 		return fmt.Errorf("error getting terminal size for display: %w", err)
@@ -86,7 +113,7 @@ func (io *EditorIO) DisplayEditor(es *editorIO.EditorState) error {
 	return nil
 }
 
-func (io *EditorIO) writeStatusLine(line int, es *editorIO.EditorState) {
+func (io *EditorIO) writeStatusLine(line int, es *core.EditorState) {
 	statusConf := []string{}
 	if io.showCharCount {
 		statusConf = append(statusConf, fmt.Sprintf("Char Count %d", es.CharCount))

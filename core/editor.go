@@ -8,7 +8,6 @@ import (
 	"os"
 	"unicode/utf8"
 
-	editorIO "github.com/joshtyf/texteditor/io"
 	editorLog "github.com/joshtyf/texteditor/log"
 )
 
@@ -34,14 +33,14 @@ type Editor struct {
 	currentColumn int
 	buf           Buffer
 	logger        *log.Logger
-	io            editorIO.EditorIO
+	io            EditorIO
 	file          string
 	editHistory   []*EditOp // TODO: Limit the size of the history
 	saved         bool
 	charCount     int
 }
 
-func NewEditor(io editorIO.EditorIO, buf Buffer, file string) *Editor {
+func NewEditor(io EditorIO, buf Buffer, file string) *Editor {
 	return &Editor{
 		lines:         make([]int, 1),
 		currentLine:   0,
@@ -72,10 +71,10 @@ func (e *Editor) Start(ctx context.Context) error {
 		}
 	}()
 
-	var keyPressed *editorIO.Key
+	var keyPressed *Key
 	for {
 		e.io.DisplayEditor(
-			&editorIO.EditorState{
+			&EditorState{
 				KeyPressed:      keyPressed,
 				CurrentLine:     e.currentLine,
 				CurrentColumn:   e.currentColumn,
@@ -93,29 +92,37 @@ func (e *Editor) Start(ctx context.Context) error {
 				return fmt.Errorf("input channel closed unexpectedly")
 			}
 			switch keyPressed.Code {
-			case editorIO.CtrlD:
+			case CtrlD:
 				e.logger.Println("Ctrl+D pressed, stopping editor")
 				return ErrEditorQuit{}
-			case editorIO.RuneKey:
+			case RuneKey:
 				e.updateEditHistory(InsertOp, keyPressed.Rune)
 				e.insertAtCursor(keyPressed.Rune)
-			case editorIO.ArrowUp:
+			case ArrowUp:
 				e.moveCursorUp()
-			case editorIO.ArrowDown:
+			case ArrowDown:
 				e.moveCursorDown()
-			case editorIO.ArrowLeft:
+			case ArrowLeft:
 				e.moveCursorLeft()
-			case editorIO.ArrowRight:
+			case ArrowRight:
 				e.moveCursorRight()
-			case editorIO.Newline:
+			case ShiftArrowUp:
+				e.moveCursorUp()
+			case ShiftArrowDown:
+				e.moveCursorDown()
+			case ShiftArrowLeft:
+				e.moveCursorLeft()
+			case ShiftArrowRight:
+				e.moveCursorRight()
+			case Newline:
 				e.updateEditHistory(InsertOp, '\n')
 				e.insertAtCursor('\n')
-			case editorIO.Backspace:
+			case Backspace:
 				deletedRune := e.backspaceAtCursor()
 				e.updateEditHistory(DeleteOp, deletedRune)
-			case editorIO.Undo:
+			case Undo:
 				e.undo()
-			case editorIO.Save:
+			case Save:
 				_ = e.Save()
 			}
 		}

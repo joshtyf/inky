@@ -1,4 +1,4 @@
-package io
+package core
 
 type ReadEditorLines func(start int, n int) ([][]byte, error)
 

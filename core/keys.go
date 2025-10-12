@@ -1,4 +1,4 @@
-package io
+package core
 
 type KeyCode int
 
@@ -8,6 +8,10 @@ const (
 	ArrowDown
 	ArrowLeft
 	ArrowRight
+	ShiftArrowUp
+	ShiftArrowDown
+	ShiftArrowLeft
+	ShiftArrowRight
 	CtrlD
 	Backspace
 	Undo

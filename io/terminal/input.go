@@ -7,28 +7,32 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	editorIO "github.com/joshtyf/texteditor/io"
+	"github.com/joshtyf/texteditor/core"
 	"golang.org/x/sys/unix"
 )
 
 const default_buffer_read_size = 256
 
-type keyMapping map[string]editorIO.Key
+type keyMapping map[string]core.Key
 
 var defaultMapping = keyMapping{
 	// Escape Sequences
-	"\x1b[A": {Code: editorIO.ArrowUp},
-	"\x1b[B": {Code: editorIO.ArrowDown},
-	"\x1b[D": {Code: editorIO.ArrowLeft},
-	"\x1b[C": {Code: editorIO.ArrowRight},
-	"\x1b":   {Code: editorIO.Escape},
+	"\x1b[A":    {Code: core.ArrowUp},
+	"\x1b[B":    {Code: core.ArrowDown},
+	"\x1b[D":    {Code: core.ArrowLeft},
+	"\x1b[C":    {Code: core.ArrowRight},
+	"\x1b[1;2A": {Code: core.ShiftArrowUp},
+	"\x1b[1;2B": {Code: core.ShiftArrowDown},
+	"\x1b[1;2C": {Code: core.ShiftArrowRight},
+	"\x1b[1;2D": {Code: core.ShiftArrowLeft},
+	"\x1b":      {Code: core.Escape},
 
 	// Control Keys
-	"\x04": {Code: editorIO.CtrlD},
-	"\x7f": {Code: editorIO.Backspace},
-	"\x1f": {Code: editorIO.Undo},
-	"\x0a": {Code: editorIO.Newline},
-	"\x13": {Code: editorIO.Save},
+	"\x04": {Code: core.CtrlD},
+	"\x7f": {Code: core.Backspace},
+	"\x1f": {Code: core.Undo},
+	"\x0a": {Code: core.Newline},
+	"\x13": {Code: core.Save},
 }
 
 type input struct {
@@ -62,9 +66,9 @@ func (in *input) setup() error {
 	return nil
 }
 
-func (in *input) parseSpecialSequences(b []byte) (*editorIO.Key, int) {
+func (in *input) parseSpecialSequences(b []byte) (*core.Key, int) {
 	bufstr := string(b)
-	var matchedKey *editorIO.Key
+	var matchedKey *core.Key
 	matchedKeySize := 0
 	for k, v := range in.mapping {
 		predicateLen := len(k)
@@ -80,13 +84,13 @@ func (in *input) parseSpecialSequences(b []byte) (*editorIO.Key, int) {
 	return matchedKey, matchedKeySize
 }
 
-func (in *input) read() ([]*editorIO.Key, error) {
+func (in *input) read() ([]*core.Key, error) {
 	var b [default_buffer_read_size]byte
 	n, err := os.Stdin.Read(b[:])
 	if err != nil {
 		return nil, fmt.Errorf("error reading from stdin: %w", err)
 	}
-	keys := make([]*editorIO.Key, 0)
+	keys := make([]*core.Key, 0)
 	for i := 0; i < n; i++ {
 		k, size := in.parseSpecialSequences(b[i:])
 		if k != nil {
@@ -104,7 +108,7 @@ func (in *input) read() ([]*editorIO.Key, error) {
 				return nil, fmt.Errorf("error decoding rune: empty byte sequence")
 			}
 		}
-		keys = append(keys, &editorIO.Key{Code: editorIO.RuneKey, Rune: r})
+		keys = append(keys, &core.Key{Code: core.RuneKey, Rune: r})
 		i += size - 1 // Move to the next sequence
 	}
 	return keys, nil
