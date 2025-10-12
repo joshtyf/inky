@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/joshtyf/texteditor/core"
 	editorLog "github.com/joshtyf/texteditor/log"
@@ -21,10 +22,39 @@ func setDefaultConfig(conf *viper.Viper) {
 }
 
 type Selection struct {
-	anchorLine   int
-	anchorColumn int
-	focusLine    int
-	focusColumn  int
+	anchorLine       int
+	anchorColumn     int
+	focusLine        int
+	focusColumn      int
+	forwardDirection bool
+}
+
+func (s *Selection) active() bool {
+	return !(s.anchorLine == s.focusLine && s.anchorColumn == s.focusColumn)
+}
+
+func (s *Selection) insertHighlightStart(line, col int) bool {
+	var cmpLine, cmpCol int
+	if s.forwardDirection {
+		cmpLine = s.anchorLine
+		cmpCol = s.anchorColumn
+	} else {
+		cmpLine = s.focusLine
+		cmpCol = s.focusColumn
+	}
+	return cmpLine == line && cmpCol == col
+}
+
+func (s *Selection) insertHighlightEnd(line, col int) bool {
+	var cmpLine, cmpCol int
+	if s.forwardDirection {
+		cmpLine = s.focusLine
+		cmpCol = s.focusColumn
+	} else {
+		cmpLine = s.anchorLine
+		cmpCol = s.anchorColumn
+	}
+	return cmpLine == line && cmpCol == col
 }
 
 type EditorIO struct {
@@ -47,10 +77,11 @@ func NewEditorIO(globalConf *viper.Viper) *EditorIO {
 		output:        newOutput(logger),
 		showCharCount: conf.GetBool("showCharCount"),
 		selection: &Selection{
-			anchorLine:   0,
-			anchorColumn: 0,
-			focusLine:    0,
-			focusColumn:  0,
+			anchorLine:       0,
+			anchorColumn:     0,
+			focusLine:        0,
+			focusColumn:      0,
+			forwardDirection: true,
 		},
 	}
 }
@@ -78,19 +109,6 @@ func (io *EditorIO) Start() (<-chan *core.Key, error) {
 }
 
 func (io *EditorIO) DisplayEditor(es *core.EditorState) error {
-	// Selection
-	// TODO: update if this is wrong
-	if es.KeyPressed != nil &&
-		es.KeyPressed.Code != core.ShiftArrowUp &&
-		es.KeyPressed.Code != core.ShiftArrowDown &&
-		es.KeyPressed.Code != core.ShiftArrowLeft && es.KeyPressed.Code != core.ShiftArrowRight {
-		io.selection.anchorLine = es.CurrentLine
-		io.selection.anchorColumn = es.CurrentColumn
-	}
-	io.selection.focusLine = es.CurrentLine
-	io.selection.focusColumn = es.CurrentColumn
-	io.logger.Println(io.selection)
-
 	_, h, err := term.GetSize(int(os.Stdout.Fd()))
 	if err != nil {
 		return fmt.Errorf("error getting terminal size for display: %w", err)
@@ -101,13 +119,59 @@ func (io *EditorIO) DisplayEditor(es *core.EditorState) error {
 	} else if es.CurrentLine >= io.top+h-1 {
 		io.top = es.CurrentLine - h + 2
 	}
-	content, err := es.ReadEditorLines(io.top, h-1) // Last line reserved for status line
+	// Clear screen
+	// TODO: refactor this
+	for i := range h {
+		fmt.Print(getGoToLineEscapeSequence(i))
+		fmt.Print(eraseEntireLine)
+	}
+	lines, err := es.ReadEditorLines(io.top, h-1) // Last line reserved for status line
 	if err != nil {
 		return fmt.Errorf("error reading editor lines: %w", err)
 	}
-	for i := range content {
-		io.output.writeLine(i, content[i])
+	fullContent := make([]byte, 0)
+	// Selection
+	// TODO: refactor selection. It is working but the code should be neater
+	if es.KeyPressed != nil &&
+		es.KeyPressed.Code != core.ShiftArrowUp &&
+		es.KeyPressed.Code != core.ShiftArrowDown &&
+		es.KeyPressed.Code != core.ShiftArrowLeft && es.KeyPressed.Code != core.ShiftArrowRight {
+		io.selection.anchorLine = es.CurrentLine - io.top
+		io.selection.anchorColumn = es.CurrentColumn
 	}
+	io.selection.focusLine = es.CurrentLine - io.top
+	io.selection.focusColumn = es.CurrentColumn
+	if io.selection.focusLine < io.selection.anchorLine || io.selection.focusColumn < io.selection.anchorColumn {
+		io.selection.forwardDirection = false
+	} else {
+		io.selection.forwardDirection = true
+	}
+
+	io.logger.Println(io.selection)
+	for i := range lines {
+		lineColumn := 0
+		for j := 0; j < len(lines[i]); j++ {
+			if io.selection.active() && io.selection.insertHighlightStart(i, lineColumn) {
+				fullContent = append(fullContent, []byte(highlightStart)...)
+			}
+			r, size := utf8.DecodeRune(lines[i][j:])
+			if r == utf8.RuneError {
+				if size == 1 {
+					return fmt.Errorf("error decoding rune: invalid byte sequence %v", lines[i][j:])
+				} else {
+					return fmt.Errorf("error decoding rune: empty byte sequence")
+				}
+			}
+			fullContent = append(fullContent, lines[i][j:j+size]...)
+			lineColumn++
+			j += size - 1
+			if io.selection.active() && io.selection.insertHighlightEnd(i, lineColumn) {
+				fullContent = append(fullContent, []byte(highlightEnd)...)
+			}
+		}
+		fullContent = append(fullContent, "\n"...)
+	}
+	io.output.writeData(fullContent)
 	io.writeStatusLine(h-1, es)
 	io.output.moveCursor(es.CurrentLine-io.top, es.CurrentColumn)
 	return nil

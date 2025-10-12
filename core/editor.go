@@ -341,7 +341,6 @@ func (e *Editor) undo() {
 	e.editHistory = e.editHistory[:len(e.editHistory)-1]
 }
 
-// TODO: change return type to rune?
 func (e *Editor) readLines(start, n int) ([][]byte, error) {
 	cursor := 0
 	for i := range start {
