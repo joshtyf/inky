@@ -20,6 +20,10 @@ const (
 	Escape
 )
 
+func (k KeyCode) IsShiftArrow() bool {
+	return k == ShiftArrowUp || k == ShiftArrowDown || k == ShiftArrowLeft || k == ShiftArrowRight
+}
+
 type Key struct {
 	Code KeyCode
 	Rune rune

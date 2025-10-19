@@ -29,11 +29,11 @@ type Selection struct {
 	forwardDirection bool
 }
 
-func (s *Selection) active() bool {
+func (s *Selection) isActive() bool {
 	return !(s.anchorLine == s.focusLine && s.anchorColumn == s.focusColumn)
 }
 
-func (s *Selection) insertHighlightStart(line, col int) bool {
+func (s *Selection) isHighlightStart(line, col int) bool {
 	var cmpLine, cmpCol int
 	if s.forwardDirection {
 		cmpLine = s.anchorLine
@@ -45,7 +45,7 @@ func (s *Selection) insertHighlightStart(line, col int) bool {
 	return cmpLine == line && cmpCol == col
 }
 
-func (s *Selection) insertHighlightEnd(line, col int) bool {
+func (s *Selection) isHighlightEnd(line, col int) bool {
 	var cmpLine, cmpCol int
 	if s.forwardDirection {
 		cmpLine = s.focusLine
@@ -55,6 +55,21 @@ func (s *Selection) insertHighlightEnd(line, col int) bool {
 		cmpCol = s.anchorColumn
 	}
 	return cmpLine == line && cmpCol == col
+}
+
+func (s *Selection) updateAnchor(line, col int) {
+	s.anchorLine = line
+	s.anchorColumn = col
+}
+
+func (s *Selection) updateFocus(line, col int) {
+	s.focusLine = line
+	s.focusColumn = col
+	if s.focusLine < s.anchorLine || s.focusColumn < s.anchorColumn {
+		s.forwardDirection = false
+	} else {
+		s.forwardDirection = true
+	}
 }
 
 type EditorIO struct {
@@ -130,28 +145,17 @@ func (io *EditorIO) DisplayEditor(es *core.EditorState) error {
 		return fmt.Errorf("error reading editor lines: %w", err)
 	}
 	fullContent := make([]byte, 0)
-	// Selection
-	// TODO: refactor selection. It is working but the code should be neater
-	if es.KeyPressed != nil &&
-		es.KeyPressed.Code != core.ShiftArrowUp &&
-		es.KeyPressed.Code != core.ShiftArrowDown &&
-		es.KeyPressed.Code != core.ShiftArrowLeft && es.KeyPressed.Code != core.ShiftArrowRight {
-		io.selection.anchorLine = es.CurrentLine - io.top
-		io.selection.anchorColumn = es.CurrentColumn
-	}
-	io.selection.focusLine = es.CurrentLine - io.top
-	io.selection.focusColumn = es.CurrentColumn
-	if io.selection.focusLine < io.selection.anchorLine || io.selection.focusColumn < io.selection.anchorColumn {
-		io.selection.forwardDirection = false
-	} else {
-		io.selection.forwardDirection = true
-	}
 
-	io.logger.Println(io.selection)
+	// Update selection
+	if es.KeyPressed != nil && !es.KeyPressed.Code.IsShiftArrow() {
+		io.selection.updateAnchor(es.CurrentLine-io.top, es.CurrentColumn)
+	}
+	io.selection.updateFocus(es.CurrentLine-io.top, es.CurrentColumn)
+
 	for i := range lines {
 		lineColumn := 0
 		for j := 0; j < len(lines[i]); j++ {
-			if io.selection.active() && io.selection.insertHighlightStart(i, lineColumn) {
+			if io.selection.isActive() && io.selection.isHighlightStart(i, lineColumn) {
 				fullContent = append(fullContent, []byte(highlightStart)...)
 			}
 			r, size := utf8.DecodeRune(lines[i][j:])
@@ -165,7 +169,7 @@ func (io *EditorIO) DisplayEditor(es *core.EditorState) error {
 			fullContent = append(fullContent, lines[i][j:j+size]...)
 			lineColumn++
 			j += size - 1
-			if io.selection.active() && io.selection.insertHighlightEnd(i, lineColumn) {
+			if io.selection.isActive() && io.selection.isHighlightEnd(i, lineColumn) {
 				fullContent = append(fullContent, []byte(highlightEnd)...)
 			}
 		}
