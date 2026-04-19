@@ -223,7 +223,6 @@ func (e *Editor) backspace() {
 func (e *Editor) getLine(lineNumber int) []rune {
 	if lineNumber < 0 || lineNumber >= len(e.lineMap) {
 		return []rune{} // TODO: figure out what the right behaviour is here.
-		panic(fmt.Sprintf("editor: getLine called with out-of-bounds line number %d", lineNumber))
 	}
 	cursor := 0
 	for i := range lineNumber {

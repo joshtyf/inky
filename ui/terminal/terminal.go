@@ -1,8 +1,6 @@
-package ui
+package terminal
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -10,10 +8,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/joshtyf/inky/core"
-	"github.com/yuin/goldmark"
-	"github.com/yuin/goldmark/ast"
-	"github.com/yuin/goldmark/renderer"
-	"github.com/yuin/goldmark/util"
 	"golang.org/x/sys/unix"
 	"golang.org/x/term"
 )
@@ -42,59 +36,23 @@ const (
 	RawView
 )
 
+type Renderer interface {
+	Render(line int, es *core.EditorState) (string, error)
+}
+
+var renderers = map[int]Renderer{
+	MarkdownView: NewMarkdownRenderer(),
+	RawView:      NewRawRenderer(),
+}
+
 type Terminal struct {
 	topLine      int
 	currentLine  int
 	screenHeight int
-	mdRenderer   goldmark.Markdown
 	viewMode     int
 	renderCache  []string
 }
 
-type TerminalMdRenderer struct{}
-
-func NewTerminalMdRenderer() *TerminalMdRenderer {
-	return &TerminalMdRenderer{}
-}
-
-func (t *TerminalMdRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
-	reg.Register(ast.KindParagraph, func(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
-		if !entering {
-			_, err := w.WriteString("\n\n")
-			if err != nil {
-				panic(err)
-			}
-		}
-		return ast.WalkContinue, nil
-	})
-	reg.Register(ast.KindEmphasis, func(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
-		n := node.(*ast.Emphasis)
-		if entering {
-			tag := "\x1b[3m" // Italic
-			if n.Level == 2 {
-				tag = "\x1b[1m" // Bold
-			}
-			_, err := w.WriteString(tag)
-			if err != nil {
-				panic(err)
-			}
-		} else {
-			_, err := w.WriteString("\x1b[0m") // Reset
-			if err != nil {
-				panic(err)
-			}
-		}
-		return ast.WalkContinue, nil
-	})
-	reg.Register(ast.KindText, func(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
-		if !entering {
-			return ast.WalkContinue, nil
-		}
-		n := node.(*ast.Text)
-		_, err := w.Write(n.Segment.Value(source))
-		return ast.WalkContinue, err
-	})
-}
 func NewTerminal() *Terminal {
 	_, h, err := term.GetSize(int(os.Stdout.Fd()))
 	if err != nil {
@@ -104,15 +62,8 @@ func NewTerminal() *Terminal {
 		topLine:      0,
 		currentLine:  0,
 		screenHeight: h,
-		mdRenderer: goldmark.New(
-			goldmark.WithRenderer(
-				renderer.NewRenderer(
-					renderer.WithNodeRenderers(util.Prioritized(NewTerminalMdRenderer(), 100)),
-				),
-			),
-		),
-		viewMode:    RawView,
-		renderCache: make([]string, h),
+		viewMode:     RawView,
+		renderCache:  make([]string, h),
 	}
 }
 
@@ -226,27 +177,14 @@ func (t *Terminal) moveCursor(line, column int) {
 }
 
 func (t *Terminal) updateRenderCache(es *core.EditorState) {
-	switch t.viewMode {
-	case MarkdownView:
-		var buf bytes.Buffer
-		source := es.GetAll()
-		if err := t.mdRenderer.Convert(source, &buf); err != nil {
-			panic(err)
+	renderer := renderers[t.viewMode]
+	for i := 0; i < t.screenHeight; i++ {
+		lineNum := t.topLine + i
+		line, err := renderer.Render(lineNum, es)
+		if err != nil {
+			panic("error rendering line: " + err.Error())
 		}
-		scanner := bufio.NewScanner(&buf)
-		for i := 0; i < t.screenHeight; i++ {
-			if scanner.Scan() {
-				t.renderCache[i] = scanner.Text()
-			} else {
-				t.renderCache[i] = ""
-			}
-		}
-	case RawView:
-		for i := 0; i < t.screenHeight; i++ {
-			t.renderCache[i] = string(es.GetLine(t.topLine + i))
-		}
-	default:
-		panic("invalid view mode")
+		t.renderCache[i] = line
 	}
 }
 

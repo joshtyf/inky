@@ -7,11 +7,11 @@ import (
 
 	"github.com/joshtyf/inky/buffer"
 	"github.com/joshtyf/inky/core"
-	"github.com/joshtyf/inky/ui"
+	"github.com/joshtyf/inky/ui/terminal"
 )
 
 func main() {
-	editor := core.NewEditor(ui.NewTerminal(), buffer.NewGapBuffer())
+	editor := core.NewEditor(terminal.NewTerminal(), buffer.NewGapBuffer())
 	ctx, _ := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	if err := editor.Start(ctx); err != nil {
 		panic(err)
