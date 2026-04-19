@@ -4,379 +4,246 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
-	"os"
 	"unicode/utf8"
 
-	editorLog "github.com/joshtyf/texteditor/log"
+	"github.com/joshtyf/inky/log"
 )
 
-type EditOpType int
+type KeyCode int
 
 const (
-	InsertOp EditOpType = iota
-	DeleteOp
+	RuneKey KeyCode = iota
+	ArrowUp
+	ArrowDown
+	ArrowLeft
+	ArrowRight
+	ShiftArrowUp
+	ShiftArrowDown
+	ShiftArrowLeft
+	ShiftArrowRight
+	CtrlD
+	Backspace
+	Undo
+	Save
+	Escape
 )
 
-type EditOp struct {
-	Type            EditOpType
-	StartLine       int
-	StartLineColumn int
-	EndLine         int
-	EndLineColumn   int
-	Data            []rune
+func (k KeyCode) IsMovementKey() bool {
+	return k == ArrowUp || k == ArrowDown || k == ArrowLeft || k == ArrowRight
+}
+
+func (k KeyCode) IsShiftArrow() bool {
+	return k == ShiftArrowUp || k == ShiftArrowDown || k == ShiftArrowLeft || k == ShiftArrowRight
+}
+
+type Key struct {
+	Code KeyCode
+	Rune rune
+}
+
+type UserInterface interface {
+	Init() error
+	Close() error
+	GetKey(ctx context.Context) <-chan *Key
+	Update(es *EditorState) error
+}
+
+type Buffer interface {
+	InsertRune(r rune, cursor int)
+	SeekToChar(cursor int, char byte, count int) int
+	ReverseSeekToChar(cursor int, char byte, count int) int
+	Read(cursor int, length int) []byte
+	ReadAll() []byte
+	DeleteRune(cursor int) rune
+	GetRune(cursor int) rune
+	Len() int
+	WriteTo(w io.Writer) (int64, error)
+}
+
+type EditorState struct {
+	LastKeyPresssed *Key
+	CurrentLine     int
+	CurrentCol      int
+	GetLine         func(lineNumber int) []rune // TODO: should we return bytes or runes?
+	GetAll          func() []byte
 }
 
 type Editor struct {
-	lines         []int
-	currentLine   int
-	currentColumn int
-	buf           Buffer
-	logger        *log.Logger
-	io            EditorIO
-	file          string
-	editHistory   []*EditOp // TODO: Limit the size of the history
-	saved         bool
-	charCount     int
+	ui          UserInterface
+	buf         Buffer
+	lineMap     []int
+	currentLine int
+	currentCol  int
 }
 
-func NewEditor(io EditorIO, buf Buffer, file string) *Editor {
+func NewEditor(ui UserInterface, buf Buffer) *Editor {
+	lineMap := make([]int, 1)
 	return &Editor{
-		lines:         make([]int, 1),
-		currentLine:   0,
-		currentColumn: 0,
-		buf:           buf,
-		logger:        editorLog.CreateLogger("editor"),
-		io:            io,
-		file:          file,
-		editHistory:   make([]*EditOp, 0),
-		saved:         true,
-		charCount:     0,
+		ui:          ui,
+		buf:         buf,
+		lineMap:     lineMap,
+		currentLine: 0,
+		currentCol:  0,
 	}
 }
 
 func (e *Editor) Start(ctx context.Context) error {
-	e.logger.Println("starting editor")
-	err := e.init()
-	if err != nil {
-		return fmt.Errorf("error initialising editor: %w", err)
+	if err := e.ui.Init(); err != nil {
+		return err
 	}
-	inputCh, err := e.io.Start()
-	if err != nil {
-		return fmt.Errorf("error starting io: %w", err)
-	}
-	defer func() {
-		if e.io.Close() != nil {
-			e.logger.Println("error closing io")
-		}
-	}()
+	defer e.ui.Close()
 
-	var keyPressed *Key
+	keyCh := e.ui.GetKey(ctx)
+
 	for {
-		e.io.DisplayEditor(
-			&EditorState{
-				KeyPressed:      keyPressed,
-				CurrentLine:     e.currentLine,
-				CurrentColumn:   e.currentColumn,
-				ReadEditorLines: e.readLines,
-				EditorSaved:     e.saved,
-				CharCount:       e.charCount,
-			},
-		)
 		select {
 		case <-ctx.Done():
-			e.logger.Println("editor stopped")
-			return ErrEditorQuit{}
-		case keyPressed = <-inputCh:
-			if keyPressed == nil {
-				return fmt.Errorf("input channel closed unexpectedly")
+			return nil
+		case key, ok := <-keyCh:
+			if !ok {
+				return nil
 			}
-			switch keyPressed.Code {
-			case CtrlD:
-				e.logger.Println("Ctrl+D pressed, stopping editor")
-				return ErrEditorQuit{}
-			case RuneKey:
-				e.updateEditHistory(InsertOp, keyPressed.Rune)
-				e.insertAtCursor(keyPressed.Rune)
-			case ArrowUp:
-				e.moveCursorUp()
-			case ArrowDown:
-				e.moveCursorDown()
-			case ArrowLeft:
-				e.moveCursorLeft()
-			case ArrowRight:
-				e.moveCursorRight()
-			case ShiftArrowUp:
-				e.moveCursorUp()
-			case ShiftArrowDown:
-				e.moveCursorDown()
-			case ShiftArrowLeft:
-				e.moveCursorLeft()
-			case ShiftArrowRight:
-				e.moveCursorRight()
-			case Newline:
-				e.updateEditHistory(InsertOp, '\n')
-				e.insertAtCursor('\n')
-			case Backspace:
-				deletedRune := e.backspaceAtCursor()
-				e.updateEditHistory(DeleteOp, deletedRune)
-			case Undo:
-				e.undo()
-			case Save:
-				_ = e.Save()
-			}
+			e.handleKey(key)
+			// Step 1: Handle the received key (store in buffer, update cursor, etc.)
+			// Step 2: Render the updated state to the ui
+			// fmt.Print("Curr line:", e.currentLine, " Col:", e.currentCol, "\n")
+			// fmt.Printf("Received key: %+v\n", key)
+			e.ui.Update(&EditorState{
+				LastKeyPresssed: key,
+				CurrentLine:     e.currentLine,
+				CurrentCol:      e.currentCol,
+				GetLine:         e.getLine,
+				GetAll:          e.getAll,
+			})
 		}
 	}
 }
 
-func (e *Editor) init() error {
-	f, err := os.OpenFile(e.file, os.O_CREATE|os.O_RDWR, 0666)
-	if err != nil {
-		return fmt.Errorf("error opening file %s: %w", e.file, err)
-	}
-	defer f.Close()
-	content, err := io.ReadAll(f)
-	if err != nil {
-		return fmt.Errorf("error reading file %s: %w", e.file, err)
-	}
-	// Initialize buffer with content
-	for i := 0; i < len(content); i++ {
-		r, size := utf8.DecodeRune(content[i:])
-		if r == utf8.RuneError {
-			if size == 1 {
-				return fmt.Errorf("error decoding rune: invalid byte sequence")
-			} else {
-				return fmt.Errorf("error decoding rune: empty byte sequence")
-			}
-		}
-		e.insertAtCursor(r)
-		i += size - 1
-	}
-	// Reset the cursor to the start
-	e.currentColumn = 0
-	e.currentLine = 0
-	return nil
-}
-
-func (e *Editor) getCursor() int {
-	cursor := 0
-	for i := range e.currentLine {
-		cursor += e.lines[i]
-	}
-	return cursor + min(e.lines[e.currentLine], e.currentColumn)
-}
-
-func (e *Editor) setToCursor(cursor int) {
-	if cursor < 0 {
-		panic("editor: negative cursor position received")
-	}
-	column := cursor
-	for i := range e.lines {
-		if column < e.lines[i] {
-			e.currentLine = i
-			e.currentColumn = column
-			return
-		}
-		column -= e.lines[i]
-	}
-	if column > 0 {
-		panic("editor: cursor position out of bounds")
-	}
-}
-
-// This function should only be called when the edit operation inserted/deleted a newline
-func (e *Editor) updateEditorLines(op EditOpType) {
-	if op == InsertOp {
-		e.lines = append(e.lines, 0)
-		// When inserting a newline, we need to shift all the lines after the current line
-		if e.currentLine+1 < len(e.lines) {
-			copy(e.lines[e.currentLine+2:], e.lines[e.currentLine+1:])
-		}
-		// Break length of current line and add it to the next line
-		e.lines[e.currentLine+1] = e.lines[e.currentLine] - e.currentColumn
-		e.lines[e.currentLine] = e.currentColumn
-		// Position the cursor at the start of the next line
-		e.currentLine++
-		e.currentColumn = 0
-	} else {
-		// When deleting a newline, we need to merge the current line with the previous line
-		e.lines[e.currentLine-1] += e.lines[e.currentLine]
-		copy(e.lines[e.currentLine:], e.lines[e.currentLine+1:])
-		e.lines = e.lines[:len(e.lines)-1]
-		e.currentLine--
-		e.currentColumn = e.lines[e.currentLine]
-	}
-}
-
-func (e *Editor) insertAtCursor(r rune) {
-	cursor := e.getCursor()
-	e.buf.InsertRune(r, cursor)
-	e.currentColumn += 1
-	e.lines[e.currentLine] += 1
-	e.charCount++
-	if r == '\n' {
-		e.updateEditorLines(InsertOp)
-	}
-}
-
-func (e *Editor) updateEditHistory(op EditOpType, r rune) {
-	// Note: updateEditHistory is called at different times.
-	// For insert, it is called before the actual insertion.
-	// For delete, it is called after the deletion.
-	// This affects the editor's current line and column.
-	if e.newEditNodeRequired(op) {
-		e.editHistory = append(e.editHistory, &EditOp{
-			Type:            op,
-			StartLine:       e.currentLine,
-			StartLineColumn: e.currentColumn,
-			EndLine:         e.currentLine,
-			EndLineColumn:   e.currentColumn,
-			Data:            []rune{},
-		})
-	}
-	lastEdit := e.editHistory[len(e.editHistory)-1]
-	lastEdit.Data = append(lastEdit.Data, r)
-	if r == '\n' {
-		lastEdit.EndLine++
-		lastEdit.EndLineColumn = 0
-	} else {
-		if op == InsertOp {
-			lastEdit.EndLineColumn++
-		} else {
-			lastEdit.StartLineColumn--
-		}
-	}
-	e.saved = false
-}
-
-func (e *Editor) newEditNodeRequired(op EditOpType) bool {
-	if len(e.editHistory) == 0 {
-		return true
-	}
-	lastOp := e.editHistory[len(e.editHistory)-1]
-	if lastOp.Type != op {
-		return true
-	}
-	lastEditedRune := lastOp.Data[len(lastOp.Data)-1]
-	if lastEditedRune == '\n' || lastEditedRune == ' ' {
-		return true
-	}
-	if op == InsertOp && (lastOp.EndLine != e.currentLine || lastOp.EndLineColumn != e.currentColumn) {
-		return true
-	} else if op == DeleteOp && (lastOp.StartLine != e.currentLine || lastOp.StartLineColumn != e.currentColumn) {
-		return true
-	}
-	return false
-}
-
-func (e *Editor) moveCursorRight() {
-	if e.currentLine == len(e.lines)-1 && e.currentColumn == e.lines[e.currentLine] {
+func (e *Editor) handleKey(key *Key) {
+	switch key.Code {
+	case RuneKey:
+		e.insertRune(key.Rune)
+	case ArrowUp:
+		e.moveCursorUp()
+	case ArrowDown:
+		e.moveCursorDown()
+	case ArrowLeft:
+		e.moveCursorLeft()
+	case ArrowRight:
+		e.moveCursorRight()
+	case Backspace:
+		e.backspace()
+	case Escape:
+		// No-Op for now
 		return
 	}
-	e.currentColumn++
-	if e.currentColumn >= e.lines[e.currentLine] && e.currentLine < len(e.lines)-1 {
-		e.currentColumn = 0
-		e.currentLine++
-	}
-}
-
-func (e *Editor) moveCursorLeft() {
-	if e.currentLine == 0 && e.currentColumn == 0 {
-		return
-	}
-	e.currentColumn--
-	if e.currentColumn < 0 && e.currentLine > 0 {
-		e.currentLine--
-		e.currentColumn = e.lines[e.currentLine] - 1
-	}
+	e.debug()
 }
 
 func (e *Editor) moveCursorUp() {
 	if e.currentLine == 0 {
 		return
 	}
-	e.currentLine = e.currentLine - 1
-	e.currentColumn = min(e.currentColumn, e.lines[e.currentLine]-1)
+	e.currentCol = min(e.currentCol, e.lineMap[e.currentLine-1])
+	e.currentLine--
 }
 
 func (e *Editor) moveCursorDown() {
-	e.currentLine = min(e.currentLine+1, len(e.lines)-1)
-	e.currentColumn = min(e.currentColumn, e.lines[e.currentLine])
-}
-
-func (e *Editor) backspaceAtCursor() rune {
-	cursor := e.getCursor()
-	if cursor == 0 {
-		return 0
-	}
-	deletedRune := e.buf.DeleteRune(cursor - 1)
-	if e.currentColumn == 0 {
-		e.updateEditorLines(DeleteOp)
-	}
-	e.currentColumn--
-	e.lines[e.currentLine] -= 1
-	e.charCount--
-	return deletedRune
-}
-
-func (e *Editor) undo() {
-	if len(e.editHistory) == 0 {
-		e.logger.Println("no changes to undo")
+	if e.currentLine >= len(e.lineMap)-1 {
 		return
 	}
-	lastEdit := e.editHistory[len(e.editHistory)-1]
-	if lastEdit.Type == InsertOp {
-		e.currentColumn = lastEdit.EndLineColumn
-		e.currentLine = lastEdit.EndLine
-		for i := len(lastEdit.Data); i > 0; i-- {
-			e.backspaceAtCursor()
-		}
-	} else {
-		e.currentColumn = lastEdit.StartLineColumn + 1
-		e.currentLine = lastEdit.StartLine
-		for i := len(lastEdit.Data) - 1; i >= 0; i-- {
-			e.insertAtCursor(lastEdit.Data[i])
-		}
-	}
-	e.editHistory = e.editHistory[:len(e.editHistory)-1]
+	e.currentLine++
+	e.currentCol = min(e.currentCol, e.lineMap[e.currentLine])
 }
 
-func (e *Editor) readLines(start, n int) ([][]byte, error) {
+func (e *Editor) moveCursorRight() {
+	if e.currentCol < e.lineMap[e.currentLine] {
+		e.currentCol++
+	}
+	// If we're at the end of the line and there is another line,
+	// move to the beginning of the next line
+	if e.currentCol == e.lineMap[e.currentLine] && e.currentLine < len(e.lineMap)-1 {
+		e.currentLine++
+		e.currentCol = 0
+	}
+}
+
+func (e *Editor) moveCursorLeft() {
+	// If we're at the beginning of the line and there is a previous line,
+	// move to the end (newline char) of the previous line
+	if e.currentCol == 0 && e.currentLine > 0 {
+		e.currentLine--
+		e.currentCol = e.lineMap[e.currentLine]
+	}
+	if e.currentCol > 0 {
+		e.currentCol--
+	}
+}
+
+func (e *Editor) getCursorPosition() int {
 	cursor := 0
-	for i := range start {
-		cursor += e.lines[i]
+	for i := 0; i < e.currentLine; i++ {
+		cursor += e.lineMap[i]
 	}
-	content := make([][]byte, n)
-	for i := 0; i < n && cursor < e.buf.Len(); i++ {
-		nextLine := e.buf.SeekToChar(cursor, '\n', 1)
-		if nextLine == -1 {
-			nextLine = e.buf.Len()
-		}
-		data := e.buf.Read(cursor, nextLine-cursor)
-		content[i] = data
-		cursor = nextLine + 1
-	}
-
-	return content, nil
+	return cursor + e.currentCol
 }
 
-func (e *Editor) Save() error {
-	f, err := os.OpenFile(e.file, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
-	if err != nil {
-		panic(fmt.Sprintf("error creating file %s while saving: %v", e.file, err))
+func (e *Editor) insertRune(r rune) {
+	cursor := e.getCursorPosition()
+	e.buf.InsertRune(r, cursor)
+	if r == '\n' {
+		newLineMap := make([]int, len(e.lineMap)+1)
+		copy(newLineMap, e.lineMap[:e.currentLine+1])
+		newLineMap[e.currentLine] = e.currentCol
+		newLineMap[e.currentLine+1] = e.lineMap[e.currentLine] - e.currentCol
+		copy(newLineMap[e.currentLine+2:], e.lineMap[e.currentLine+1:])
+		e.lineMap = newLineMap
 	}
-	defer f.Close()
-	bytesWritten, err := e.buf.WriteTo(f)
-	if err != nil {
-		panic(fmt.Sprintf("error writing buffer to file %s while saving: %v", e.file, err))
-	}
-	e.logger.Printf("saved %d bytes to %s\n", bytesWritten, e.file)
-	e.saved = true
-	return nil
+	e.lineMap[e.currentLine]++
+	e.moveCursorRight()
 }
 
-type ErrEditorQuit struct{}
+func (e *Editor) backspace() {
+	cursor := e.getCursorPosition()
+	if cursor == 0 {
+		return
+	}
+	r := e.buf.DeleteRune(cursor - 1)
+	e.moveCursorLeft()
+	e.lineMap[e.currentLine]--
+	if r == '\n' {
+		newLineMap := make([]int, len(e.lineMap)-1)
+		copy(newLineMap, e.lineMap[:e.currentLine+1])
+		newLineMap[e.currentLine] = e.lineMap[e.currentLine] + e.lineMap[e.currentLine+1]
+		copy(newLineMap[e.currentLine+1:], e.lineMap[e.currentLine+2:])
+		e.lineMap = newLineMap
+	}
+}
 
-func (e ErrEditorQuit) Error() string {
-	return "editor: quit"
+func (e *Editor) getLine(lineNumber int) []rune {
+	if lineNumber < 0 || lineNumber >= len(e.lineMap) {
+		return []rune{} // TODO: figure out what the right behaviour is here.
+		panic(fmt.Sprintf("editor: getLine called with out-of-bounds line number %d", lineNumber))
+	}
+	cursor := 0
+	for i := range lineNumber {
+		cursor += e.lineMap[i]
+	}
+	lineBytes := e.buf.Read(cursor, e.lineMap[lineNumber])
+	runes := make([]rune, 0, utf8.RuneCount(lineBytes))
+	for i := 0; i < len(lineBytes); {
+		r, size := utf8.DecodeRune(lineBytes[i:])
+		runes = append(runes, r)
+		i += size
+	}
+	return runes
+}
+
+// TODO: improve this
+func (e *Editor) getAll() []byte {
+	return e.buf.ReadAll()
+}
+
+func (e *Editor) debug() {
+	log.Info(fmt.Sprintf("Current line: %d, current col: %d", e.currentLine, e.currentCol))
 }

@@ -1,8 +1,8 @@
-package core
+package buffer
 
 import (
 	"fmt"
-	"os"
+	"io"
 	"unicode/utf8"
 )
 
@@ -151,6 +151,13 @@ func (gb *GapBuffer) Read(cursor int, length int) []byte {
 	return contents
 }
 
+func (gb *GapBuffer) ReadAll() []byte {
+	contents := make([]byte, gb.Len())
+	copy(contents[:gb.gapStart], gb.buffer[:gb.gapStart])
+	copy(contents[gb.gapStart:], gb.buffer[gb.gapEnd:])
+	return contents
+}
+
 // TODO: deprecate this function
 // func (gb *GapBuffer) InsertByte(b byte, cursor int) {
 // 	if gb.getGapSize() == 0 {
@@ -185,20 +192,22 @@ func (gb *GapBuffer) Read(cursor int, length int) []byte {
 // }
 
 func (gb *GapBuffer) InsertRune(r rune, cursor int) {
-	rawBytes := []byte(string(r))
+	// encode rune without an intermediate string allocation
+	rawBytes := make([]byte, utf8.RuneLen(r))
+	utf8.EncodeRune(rawBytes, r)
 	if gb.getGapSize() < len(rawBytes) {
-		gb.resizeBuffer(len(gb.buffer) + len(rawBytes))
+		// request additional bytes equal to the rune length
+		gb.resizeBuffer(len(rawBytes))
 	}
 	// TODO: add undo support for inserting runes
 	pos := gb.cursorToBufferPos(cursor)
+	// TODO: handle multi-byte runes
 	if pos <= gb.gapStart {
 		gb.shiftGapStartTo(pos)
 	} else {
 		gb.shiftGapEndTo(pos)
 	}
-	for i := range rawBytes {
-		gb.buffer[gb.gapStart+i] = rawBytes[i]
-	}
+	copy(gb.buffer[gb.gapStart:gb.gapStart+len(rawBytes)], rawBytes)
 	gb.gapStart += len(rawBytes)
 	// TODO: handle the case where the inserted rune is a newline
 }
@@ -279,7 +288,7 @@ func (gb *GapBuffer) Len() int {
 	return len(gb.buffer) - gb.getGapSize()
 }
 
-func (gb *GapBuffer) WriteTo(w *os.File) (int64, error) {
+func (gb *GapBuffer) WriteTo(w io.Writer) (int64, error) {
 	totalWritten := int64(0)
 	n, err := w.Write(gb.buffer[:gb.gapStart])
 	if err != nil {
