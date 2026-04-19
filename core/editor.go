@@ -144,8 +144,8 @@ func (e *Editor) moveCursorUp() {
 	if e.currentLine == 0 {
 		return
 	}
-	e.currentCol = min(e.currentCol, e.lineMap[e.currentLine-1])
 	e.currentLine--
+	e.currentCol = min(e.currentCol, e.lineMap[e.currentLine]-1) // -1 because we want to be on the last character of the previous line, not the newline char
 }
 
 func (e *Editor) moveCursorDown() {
@@ -153,7 +153,11 @@ func (e *Editor) moveCursorDown() {
 		return
 	}
 	e.currentLine++
-	e.currentCol = min(e.currentCol, e.lineMap[e.currentLine])
+	limit := e.lineMap[e.currentLine]
+	if e.currentLine < len(e.lineMap)-1 {
+		limit-- // -1 because we want to be on the last character of the line, not the newline char
+	}
+	e.currentCol = min(e.currentCol, limit)
 }
 
 func (e *Editor) moveCursorRight() {
