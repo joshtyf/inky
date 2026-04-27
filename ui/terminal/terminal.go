@@ -94,6 +94,7 @@ func (t *Terminal) Close() error {
 	if err != nil {
 		return fmt.Errorf("error resetting stdin terminal attributes: %w", err)
 	}
+	fmt.Print("\x1b[?25h") // Ensure cursor is visible when exiting
 	return nil
 }
 
