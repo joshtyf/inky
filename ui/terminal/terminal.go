@@ -194,6 +194,11 @@ func (t *Terminal) render() {
 		fmt.Printf("\x1b[%d;1H\x1b[2K%s", i+1, t.renderCache[i]) // Move to the beginning of the line, clear it, and print the new content
 	}
 	fmt.Print("\x1b[u") // Restore cursor
+	if t.viewMode == MarkdownView {
+		fmt.Print("\x1b[?25l") // Hide cursor in markdown view
+	} else {
+		fmt.Print("\x1b[?25h") // Show cursor in raw view
+	}
 }
 
 func (t *Terminal) renderStatusLine(es *core.EditorState) {
