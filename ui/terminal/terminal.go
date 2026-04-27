@@ -31,25 +31,19 @@ var keyMapping = map[string]core.Key{
 	"\x13": {Code: core.Save},
 }
 
-const (
-	MarkdownView = iota
-	RawView
-)
-
 type Renderer interface {
 	Render(line int, es *core.EditorState) (string, error)
 }
 
-var renderers = map[int]Renderer{
-	MarkdownView: NewMarkdownRenderer(),
-	RawView:      NewRawRenderer(),
+var renderers = map[core.ViewMode]Renderer{
+	core.MarkdownView: NewMarkdownRenderer(),
+	core.RawView:      NewRawRenderer(),
 }
 
 type Terminal struct {
 	topLine      int
 	currentLine  int
 	screenHeight int
-	viewMode     int
 	renderCache  []string
 }
 
@@ -62,7 +56,6 @@ func NewTerminal() *Terminal {
 		topLine:      0,
 		currentLine:  0,
 		screenHeight: h,
-		viewMode:     RawView,
 		renderCache:  make([]string, h),
 	}
 }
@@ -159,12 +152,9 @@ func (t *Terminal) GetKey(ctx context.Context) <-chan *core.Key {
 
 func (t *Terminal) Update(es *core.EditorState) error {
 	t.moveCursor(es.CurrentLine+1, es.CurrentCol+1) // Add 1 because terminal escape codes are 1-indexed
-	if es.LastKeyPresssed.Code == core.Escape {
-		t.viewMode = (t.viewMode + 1) % 2
-	}
-	t.updateRenderCache(es)
-	t.render()
-	t.renderStatusLine(es)
+	t.updateTextCache(es)
+	t.renderText()
+	t.renderUI(es)
 	return nil
 }
 
@@ -177,8 +167,8 @@ func (t *Terminal) moveCursor(line, column int) {
 	fmt.Printf("\x1b[%d;%dH", line-t.topLine, column)
 }
 
-func (t *Terminal) updateRenderCache(es *core.EditorState) {
-	renderer := renderers[t.viewMode]
+func (t *Terminal) updateTextCache(es *core.EditorState) {
+	renderer := renderers[es.ViewMode]
 	for i := 0; i < t.screenHeight; i++ {
 		lineNum := t.topLine + i
 		line, err := renderer.Render(lineNum, es)
@@ -189,22 +179,22 @@ func (t *Terminal) updateRenderCache(es *core.EditorState) {
 	}
 }
 
-func (t *Terminal) render() {
+func (t *Terminal) renderText() {
 	fmt.Print("\x1b[s") // Save cursor
 	for i := range t.renderCache {
 		fmt.Printf("\x1b[%d;1H\x1b[2K%s", i+1, t.renderCache[i]) // Move to the beginning of the line, clear it, and print the new content
 	}
 	fmt.Print("\x1b[u") // Restore cursor
-	if t.viewMode == MarkdownView {
+}
+
+func (t *Terminal) renderUI(es *core.EditorState) {
+	if es.ViewMode == core.MarkdownView {
 		fmt.Print("\x1b[?25l") // Hide cursor in markdown view
 	} else {
 		fmt.Print("\x1b[?25h") // Show cursor in raw view
 	}
-}
-
-func (t *Terminal) renderStatusLine(es *core.EditorState) {
 	viewMode := "Raw"
-	if t.viewMode == MarkdownView {
+	if es.ViewMode == core.MarkdownView {
 		viewMode = "Markdown"
 	}
 	status := fmt.Sprintf("Line: %d, Col: %d, Mode: %s", es.CurrentLine+1, es.CurrentCol+1, viewMode)

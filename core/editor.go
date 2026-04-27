@@ -28,6 +28,13 @@ const (
 	Escape
 )
 
+type ViewMode int
+
+const (
+	MarkdownView ViewMode = iota
+	RawView
+)
+
 func (k KeyCode) IsMovementKey() bool {
 	return k == ArrowUp || k == ArrowDown || k == ArrowLeft || k == ArrowRight
 }
@@ -66,6 +73,7 @@ type EditorState struct {
 	CurrentCol      int
 	GetLine         func(lineNumber int) []rune // TODO: should we return bytes or runes?
 	GetAll          func() []byte
+	ViewMode        ViewMode
 }
 
 type Editor struct {
@@ -74,6 +82,7 @@ type Editor struct {
 	lineMap     []int
 	currentLine int
 	currentCol  int
+	viewMode    ViewMode
 }
 
 func NewEditor(ui UserInterface, buf Buffer) *Editor {
@@ -84,6 +93,7 @@ func NewEditor(ui UserInterface, buf Buffer) *Editor {
 		lineMap:     lineMap,
 		currentLine: 0,
 		currentCol:  0,
+		viewMode:    RawView,
 	}
 }
 
@@ -114,28 +124,35 @@ func (e *Editor) Start(ctx context.Context) error {
 				CurrentCol:      e.currentCol,
 				GetLine:         e.getLine,
 				GetAll:          e.getAll,
+				ViewMode:        e.viewMode,
 			})
 		}
 	}
 }
 
 func (e *Editor) handleKey(key *Key) {
-	switch key.Code {
-	case RuneKey:
-		e.insertRune(key.Rune)
-	case ArrowUp:
-		e.moveCursorUp()
-	case ArrowDown:
-		e.moveCursorDown()
-	case ArrowLeft:
-		e.moveCursorLeft()
-	case ArrowRight:
-		e.moveCursorRight()
-	case Backspace:
-		e.backspace()
-	case Escape:
-		// No-Op for now
-		return
+	if e.viewMode == MarkdownView {
+		switch key.Code {
+		case Escape:
+			e.toggleViewMode()
+		}
+	} else {
+		switch key.Code {
+		case RuneKey:
+			e.insertRune(key.Rune)
+		case ArrowUp:
+			e.moveCursorUp()
+		case ArrowDown:
+			e.moveCursorDown()
+		case ArrowLeft:
+			e.moveCursorLeft()
+		case ArrowRight:
+			e.moveCursorRight()
+		case Backspace:
+			e.backspace()
+		case Escape:
+			e.toggleViewMode()
+		}
 	}
 	e.debug()
 }
@@ -221,6 +238,14 @@ func (e *Editor) backspace() {
 		newLineMap[e.currentLine] = e.lineMap[e.currentLine] + e.lineMap[e.currentLine+1]
 		copy(newLineMap[e.currentLine+1:], e.lineMap[e.currentLine+2:])
 		e.lineMap = newLineMap
+	}
+}
+
+func (e *Editor) toggleViewMode() {
+	if e.viewMode == MarkdownView {
+		e.viewMode = RawView
+	} else {
+		e.viewMode = MarkdownView
 	}
 }
 
