@@ -43,6 +43,10 @@ func (k KeyCode) IsShiftArrow() bool {
 	return k == ShiftArrowUp || k == ShiftArrowDown || k == ShiftArrowLeft || k == ShiftArrowRight
 }
 
+func (k KeyCode) IsEditorOperation() bool {
+	return k == RuneKey || k == Backspace
+}
+
 type Key struct {
 	Code KeyCode
 	Rune rune
