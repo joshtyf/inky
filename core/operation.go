@@ -82,6 +82,8 @@ func (op InsertOperation) Merge(other Operation) (Operation, bool) {
 		mergedSequence = InsertSequenceMultiWhitespace
 	case previousSequence == InsertSequenceCharacterOnly && opSequence == InsertSequenceCharacterOnly:
 		mergedSequence = InsertSequenceCharacterOnly
+	case previousSequence == InsertSequenceMixed && opSequence == InsertSequenceCharacterOnly:
+		mergedSequence = InsertSequenceMixed
 	default:
 		// Cannot be merged
 		return nil, false
