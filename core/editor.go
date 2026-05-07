@@ -177,6 +177,22 @@ func (e *Editor) applyOperation(op Operation) {
 	op.Apply(e)
 }
 
+func (e *Editor) getLastOperation() Operation {
+	if len(e.operations) == 0 {
+		return NewNoOp()
+	}
+	return e.operations[len(e.operations)-1]
+}
+
+func (e *Editor) popLastOperation() Operation {
+	if len(e.operations) == 0 {
+		return NewNoOp()
+	}
+	op := e.operations[len(e.operations)-1]
+	e.operations = e.operations[:len(e.operations)-1]
+	return op
+}
+
 func (e *Editor) moveCursorUp() {
 	if e.currentLine == 0 {
 		return
