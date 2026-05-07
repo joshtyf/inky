@@ -331,6 +331,9 @@ func (e *Editor) recordOperation(op Operation) {
 	if _, ok := op.(InvertedOperation); ok {
 		return
 	}
+	if _, ok := op.(NoOp); ok {
+		return
+	}
 	if len(e.operations) == 0 {
 		e.operations = append(e.operations, op)
 	} else {
