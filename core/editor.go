@@ -209,7 +209,20 @@ func (e *Editor) getCursorPosition() int {
 	return cursor + e.currentCol
 }
 
-func (e *Editor) insertRune(r rune) {
+func (e *Editor) setCursorPosition(cursor int) {
+	if cursor < 0 || cursor > e.buf.Len() {
+		panic(fmt.Sprintf("Cursor position %d is out of bounds, total length: %d", cursor, e.buf.Len()))
+	}
+	line := 0
+	for line < len(e.lineMap) && cursor >= e.lineMap[line] {
+		cursor -= e.lineMap[line]
+		line++
+	}
+	e.currentLine = line
+	e.currentCol = cursor
+}
+
+func (e *Editor) insertRune(r rune) Operation {
 	cursor := e.getCursorPosition()
 	e.buf.InsertRune(r, cursor)
 	if r == '\n' {
