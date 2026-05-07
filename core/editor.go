@@ -87,6 +87,7 @@ type Editor struct {
 	currentLine int
 	currentCol  int
 	viewMode    ViewMode
+	operations  []Operation
 }
 
 func NewEditor(ui UserInterface, buf Buffer) *Editor {
@@ -140,10 +141,23 @@ func (e *Editor) handleKey(key *Key) {
 		case Escape:
 			e.toggleViewMode()
 		}
-	} else {
+		return
+	}
+	if key.Code.IsEditorOperation() {
+		var op Operation
 		switch key.Code {
 		case RuneKey:
-			e.insertRune(key.Rune)
+			op = NewInsertOperation(e.getCursorPosition(), key.Rune)
+		case Backspace:
+			if e.getCursorPosition() == 0 {
+				return
+			}
+			op = NewDeleteOperation(e.getCursorPosition()-1, e.buf.GetRune(e.getCursorPosition()-1))
+		}
+		e.applyOperation(op)
+		e.recordOperation(op)
+	} else {
+		switch key.Code {
 		case ArrowUp:
 			e.moveCursorUp()
 		case ArrowDown:
@@ -152,13 +166,15 @@ func (e *Editor) handleKey(key *Key) {
 			e.moveCursorLeft()
 		case ArrowRight:
 			e.moveCursorRight()
-		case Backspace:
-			e.backspace()
 		case Escape:
 			e.toggleViewMode()
 		}
 	}
 	e.debug()
+}
+
+func (e *Editor) applyOperation(op Operation) {
+	op.Apply(e)
 }
 
 func (e *Editor) moveCursorUp() {
@@ -218,7 +234,7 @@ func (e *Editor) setCursorPosition(cursor int) {
 		panic(fmt.Sprintf("Cursor position %d is out of bounds, total length: %d", cursor, e.buf.Len()))
 	}
 	line := 0
-	for line < len(e.lineMap) && cursor >= e.lineMap[line] {
+	for line < len(e.lineMap)-1 && cursor >= e.lineMap[line] {
 		cursor -= e.lineMap[line]
 		line++
 	}
@@ -226,7 +242,7 @@ func (e *Editor) setCursorPosition(cursor int) {
 	e.currentCol = cursor
 }
 
-func (e *Editor) insertRune(r rune) Operation {
+func (e *Editor) insertRune(r rune) {
 	cursor := e.getCursorPosition()
 	e.buf.InsertRune(r, cursor)
 	if r == '\n' {
@@ -287,6 +303,23 @@ func (e *Editor) getLine(lineNumber int) []rune {
 // TODO: improve this
 func (e *Editor) getAll() []byte {
 	return e.buf.ReadAll()
+}
+
+func (e *Editor) recordOperation(op Operation) {
+	if op == nil {
+		return
+	}
+	if len(e.operations) == 0 {
+		e.operations = append(e.operations, op)
+	} else {
+		lastOp := e.operations[len(e.operations)-1]
+		if mergedOp, ok := lastOp.Merge(op); ok {
+			e.operations[len(e.operations)-1] = mergedOp
+		} else {
+			e.operations = append(e.operations, op)
+		}
+	}
+	log.Info(fmt.Sprintf("Current operations: %+v", e.operations))
 }
 
 func (e *Editor) debug() {
