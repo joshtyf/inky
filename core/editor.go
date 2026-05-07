@@ -44,7 +44,7 @@ func (k KeyCode) IsShiftArrow() bool {
 }
 
 func (k KeyCode) IsEditorOperation() bool {
-	return k == RuneKey || k == Backspace
+	return k == RuneKey || k == Backspace || k == Undo
 }
 
 type Key struct {
@@ -153,6 +153,8 @@ func (e *Editor) handleKey(key *Key) {
 				return
 			}
 			op = NewDeleteOperation(e.getCursorPosition()-1, e.buf.GetRune(e.getCursorPosition()-1))
+		case Undo:
+			op = e.popLastOperation().Invert()
 		}
 		e.applyOperation(op)
 		e.recordOperation(op)
@@ -323,6 +325,9 @@ func (e *Editor) getAll() []byte {
 
 func (e *Editor) recordOperation(op Operation) {
 	if op == nil {
+		return
+	}
+	if _, ok := op.(InvertedOperation); ok {
 		return
 	}
 	if len(e.operations) == 0 {

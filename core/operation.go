@@ -23,6 +23,27 @@ func (op NoOp) Merge(other Operation) (Operation, bool) {
 
 func (op NoOp) Apply(e *Editor) {}
 
+// A wrapper for an operation that indicates that the operation is already an inverted operation
+type InvertedOperation struct {
+	Inner Operation
+}
+
+func NewInvertedOperation(original Operation) InvertedOperation {
+	return InvertedOperation{Inner: original}
+}
+
+func (op InvertedOperation) Invert() Operation {
+	return op.Inner.Invert()
+}
+
+func (op InvertedOperation) Merge(other Operation) (Operation, bool) {
+	return op.Inner.Merge(other)
+}
+
+func (op InvertedOperation) Apply(e *Editor) {
+	op.Inner.Apply(e)
+}
+
 type InsertSequence int
 
 const (
@@ -61,7 +82,7 @@ func (op InsertOperation) Invert() Operation {
 	} else if len(op.Runes) > 1 {
 		seq = DeleteSequenceMixed
 	}
-	return DeleteOperation{Start: op.Start, Runes: op.Runes, DeleteSequence: seq}
+	return NewInvertedOperation(DeleteOperation{Start: op.Start, Runes: op.Runes, DeleteSequence: seq})
 }
 
 func (op InsertOperation) Merge(other Operation) (Operation, bool) {
@@ -163,7 +184,7 @@ func (op DeleteOperation) Invert() Operation {
 	} else if len(op.Runes) > 1 {
 		seq = InsertSequenceMixed
 	}
-	return InsertOperation{Start: op.Start, Runes: op.Runes, InsertSequence: seq}
+	return NewInvertedOperation(InsertOperation{Start: op.Start, Runes: op.Runes, InsertSequence: seq})
 }
 
 func (op DeleteOperation) Merge(other Operation) (Operation, bool) {
