@@ -43,7 +43,7 @@ func (k KeyCode) IsShiftArrow() bool {
 	return k == ShiftArrowUp || k == ShiftArrowDown || k == ShiftArrowLeft || k == ShiftArrowRight
 }
 
-func (k KeyCode) IsEditorOperation() bool {
+func (k KeyCode) IsEditOperation() bool {
 	return k == RuneKey || k == Backspace || k == Undo
 }
 
@@ -143,7 +143,7 @@ func (e *Editor) handleKey(key *Key) {
 		}
 		return
 	}
-	if key.Code.IsEditorOperation() {
+	if key.Code.IsEditOperation() {
 		var op Operation
 		switch key.Code {
 		case RuneKey:
