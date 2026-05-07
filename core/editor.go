@@ -150,9 +150,10 @@ func (e *Editor) handleKey(key *Key) {
 			op = NewInsertOperation(e.getCursorPosition(), key.Rune)
 		case Backspace:
 			if e.getCursorPosition() == 0 {
-				return
+				op = NewNoOp()
+			} else {
+				op = NewDeleteOperation(e.getCursorPosition()-1, e.buf.GetRune(e.getCursorPosition()-1))
 			}
-			op = NewDeleteOperation(e.getCursorPosition()-1, e.buf.GetRune(e.getCursorPosition()-1))
 		case Undo:
 			op = e.popLastOperation().Invert()
 		}
