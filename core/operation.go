@@ -8,6 +8,21 @@ type Operation interface {
 	Apply(e *Editor)
 }
 
+type NoOp struct{}
+
+func NewNoOp() NoOp {
+	return NoOp{}
+}
+func (op NoOp) Invert() Operation {
+	return op
+}
+
+func (op NoOp) Merge(other Operation) (Operation, bool) {
+	return other, true
+}
+
+func (op NoOp) Apply(e *Editor) {}
+
 type InsertSequence int
 
 const (
