@@ -14,7 +14,7 @@ func NewNoOp() NoOp {
 	return NoOp{}
 }
 func (op NoOp) Invert() Operation {
-	return op
+	return NewInvertedOperation(op)
 }
 
 func (op NoOp) Merge(other Operation) (Operation, bool) {
