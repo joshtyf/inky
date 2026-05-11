@@ -25,7 +25,7 @@ const (
 	Backspace
 	Undo
 	Save
-	Escape
+	ToggleViewMode
 )
 
 type ViewMode int
@@ -78,7 +78,10 @@ type EditorState struct {
 	GetLine         func(lineNumber int) []rune // TODO: should we return bytes or runes?
 	GetAll          func() []byte
 	ViewMode        ViewMode
+	Version         int
 }
+
+const VERSION_MODULO = 1000000
 
 type Editor struct {
 	ui          UserInterface
@@ -88,6 +91,7 @@ type Editor struct {
 	currentCol  int
 	viewMode    ViewMode
 	operations  []Operation
+	version     int
 }
 
 func NewEditor(ui UserInterface, buf Buffer) *Editor {
@@ -99,6 +103,7 @@ func NewEditor(ui UserInterface, buf Buffer) *Editor {
 		currentLine: 0,
 		currentCol:  0,
 		viewMode:    RawView,
+		version:     -1,
 	}
 }
 
@@ -130,6 +135,7 @@ func (e *Editor) Start(ctx context.Context) error {
 				GetLine:         e.getLine,
 				GetAll:          e.getAll,
 				ViewMode:        e.viewMode,
+				Version:         e.version,
 			})
 		}
 	}
@@ -138,7 +144,7 @@ func (e *Editor) Start(ctx context.Context) error {
 func (e *Editor) handleKey(key *Key) {
 	if e.viewMode == MarkdownView {
 		switch key.Code {
-		case Escape:
+		case ToggleViewMode:
 			e.toggleViewMode()
 		}
 		return
@@ -169,7 +175,7 @@ func (e *Editor) handleKey(key *Key) {
 			e.moveCursorLeft()
 		case ArrowRight:
 			e.moveCursorRight()
-		case Escape:
+		case ToggleViewMode:
 			e.toggleViewMode()
 		}
 	}
@@ -178,6 +184,7 @@ func (e *Editor) handleKey(key *Key) {
 
 func (e *Editor) applyOperation(op Operation) {
 	op.Apply(e)
+	e.version = (e.version + 1) % VERSION_MODULO
 }
 
 func (e *Editor) getLastOperation() Operation {

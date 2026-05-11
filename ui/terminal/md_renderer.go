@@ -12,33 +12,44 @@ import (
 )
 
 type MarkdownRenderer struct {
+	lastRenderedVersion int
+	renderCache         []string
 }
 
 func NewMarkdownRenderer() *MarkdownRenderer {
-	return &MarkdownRenderer{}
+	return &MarkdownRenderer{
+		lastRenderedVersion: -1,
+		renderCache:         nil,
+	}
 }
 
 func (m *MarkdownRenderer) Render(line int, es *core.EditorState) (string, error) {
-	gm := goldmark.New(
-		goldmark.WithRenderer(
-			renderer.NewRenderer(
-				renderer.WithNodeRenderers(
-					util.Prioritized(m, 100),
+	if m.renderCache == nil || es.Version != m.lastRenderedVersion {
+		gm := goldmark.New(
+			goldmark.WithRenderer(
+				renderer.NewRenderer(
+					renderer.WithNodeRenderers(
+						util.Prioritized(m, 100),
+					),
 				),
 			),
-		),
-	)
-	// TODO; optimise by caching rendered lines and only re-rendering changed lines
-	var buf bytes.Buffer
-	err := gm.Convert(es.GetAll(), &buf)
-	if err != nil {
-		return "", err
+		)
+		var buf bytes.Buffer
+		err := gm.Convert(es.GetAll(), &buf)
+		if err != nil {
+			return "", err
+		}
+		scanner := bufio.NewScanner(&buf)
+		m.renderCache = make([]string, 0)
+		for scanner.Scan() {
+			m.renderCache = append(m.renderCache, scanner.Text())
+		}
+		m.lastRenderedVersion = es.Version
 	}
-	scanner := bufio.NewScanner(&buf)
-	for range line + 1 { // Scan until the desired line
-		scanner.Scan()
+	if line < len(m.renderCache) {
+		return m.renderCache[line], nil
 	}
-	return scanner.Text(), nil
+	return "", nil
 }
 
 func (m *MarkdownRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {

@@ -22,7 +22,7 @@ var keyMapping = map[string]core.Key{
 	"\x1b[1;2B": {Code: core.ShiftArrowDown},
 	"\x1b[1;2C": {Code: core.ShiftArrowRight},
 	"\x1b[1;2D": {Code: core.ShiftArrowLeft},
-	"\x1b":      {Code: core.Escape},
+	"\x1b":      {Code: core.ToggleViewMode},
 
 	// Control Keys
 	"\x04": {Code: core.CtrlD},
