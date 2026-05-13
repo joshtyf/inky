@@ -309,8 +309,11 @@ func (e *Editor) toggleViewMode() {
 }
 
 func (e *Editor) getLine(lineNumber int) []rune {
-	if lineNumber < 0 || lineNumber >= len(e.lineMap) {
-		return []rune{} // TODO: figure out what the right behaviour is here.
+	if lineNumber < 0 {
+		panic(fmt.Sprintf("lineNumber %d is out of bounds", lineNumber))
+	}
+	if lineNumber >= len(e.lineMap) {
+		return []rune{}
 	}
 	cursor := 0
 	for i := range lineNumber {
