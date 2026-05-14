@@ -181,48 +181,45 @@ func (e *Editor) saveFile() error {
 }
 
 func (e *Editor) handleKey(key *Key) {
-	if e.viewMode == MarkdownView {
-		switch key.Code {
-		case ToggleViewMode:
-			e.toggleViewMode()
-		case Save:
-			e.saveFile()
-		}
-		return
-	}
-	if key.Code.IsEditOperation() {
-		var op Operation
-		switch key.Code {
-		case RuneKey:
-			op = NewInsertOperation(e.getCursorPosition(), key.Rune)
-		case Backspace:
-			if e.getCursorPosition() == 0 {
-				op = NewNoOp()
-			} else {
-				op = NewDeleteOperation(e.getCursorPosition()-1, e.buf.GetRune(e.getCursorPosition()-1))
-			}
-		case Undo:
-			op = e.popLastOperation().Invert()
-		}
+	switch {
+	case key.Code == ToggleViewMode:
+		e.toggleViewMode()
+	case key.Code == Save:
+		e.saveFile()
+	case key.Code == ArrowUp && e.viewMode == RawView:
+		e.moveCursorUp()
+	case key.Code == ArrowDown && e.viewMode == RawView:
+		e.moveCursorDown()
+	case key.Code == ArrowLeft && e.viewMode == RawView:
+		e.moveCursorLeft()
+	case key.Code == ArrowRight && e.viewMode == RawView:
+		e.moveCursorRight()
+	case key.Code.IsEditOperation() && e.viewMode == RawView:
+		op := e.getOperationFromKey(key)
 		e.applyOperation(op)
 		e.recordOperation(op)
-	} else {
-		switch key.Code {
-		case ArrowUp:
-			e.moveCursorUp()
-		case ArrowDown:
-			e.moveCursorDown()
-		case ArrowLeft:
-			e.moveCursorLeft()
-		case ArrowRight:
-			e.moveCursorRight()
-		case ToggleViewMode:
-			e.toggleViewMode()
-		case Save:
-			e.saveFile()
-		}
 	}
 	e.debug()
+}
+
+func (e *Editor) getOperationFromKey(key *Key) Operation {
+	if !key.Code.IsEditOperation() {
+		panic(fmt.Sprintf("key code %d is not an edit operation", key.Code))
+	}
+	var op Operation
+	switch key.Code {
+	case RuneKey:
+		op = NewInsertOperation(e.getCursorPosition(), key.Rune)
+	case Backspace:
+		if e.getCursorPosition() == 0 {
+			op = NewNoOp()
+		} else {
+			op = NewDeleteOperation(e.getCursorPosition()-1, e.buf.GetRune(e.getCursorPosition()-1))
+		}
+	case Undo:
+		op = e.popLastOperation().Invert()
+	}
+	return op
 }
 
 func (e *Editor) applyOperation(op Operation) {
