@@ -145,7 +145,7 @@ func (e *Editor) Start(ctx context.Context) error {
 
 func (e *Editor) loadFile() error {
 	if e.filePath == "" {
-		return nil
+		panic("editor filePath cannot be empty")
 	}
 	f, err := os.ReadFile(e.filePath)
 	if err != nil {
