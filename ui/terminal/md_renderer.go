@@ -3,6 +3,7 @@ package terminal
 import (
 	"bufio"
 	"bytes"
+	"strings"
 
 	"github.com/joshtyf/inky/core"
 	"github.com/yuin/goldmark"
@@ -54,12 +55,33 @@ func (m *MarkdownRenderer) Render(line int, es *core.EditorState) (string, error
 
 func (m *MarkdownRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
 	reg.Register(ast.KindDocument, m.renderDocument)
+	reg.Register(ast.KindHeading, m.renderHeading)
 	reg.Register(ast.KindParagraph, m.renderParagraph)
 	reg.Register(ast.KindEmphasis, m.renderEmphasis)
 	reg.Register(ast.KindText, m.renderText)
 }
 
 func (m *MarkdownRenderer) renderDocument(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+	return ast.WalkContinue, nil
+}
+
+func (m *MarkdownRenderer) renderHeading(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+	n := node.(*ast.Heading)
+	if entering {
+		_, err := w.WriteString("\x1b[1m") // Bold
+		if err != nil {
+			panic(err)
+		}
+		_, err = w.WriteString(strings.Repeat("#", n.Level) + " ")
+		if err != nil {
+			panic(err)
+		}
+	} else {
+		_, err := w.WriteString("\x1b[0m\n\n") // Reset
+		if err != nil {
+			panic(err)
+		}
+	}
 	return ast.WalkContinue, nil
 }
 
