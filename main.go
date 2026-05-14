@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"flag"
+	"os"
 	"os/signal"
 	"syscall"
 
@@ -12,9 +12,11 @@ import (
 )
 
 func main() {
-	var filePath string
-	flag.StringVar(&filePath, "file", "", "Path to file to open")
-	flag.Parse()
+	if len(os.Args) < 2 {
+		println("Usage: inky <file-path>")
+		return
+	}
+	filePath := os.Args[1]
 	editor := core.NewEditor(filePath, terminal.NewTerminal(), buffer.NewGapBuffer())
 	ctx, _ := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	if err := editor.Start(ctx); err != nil {
