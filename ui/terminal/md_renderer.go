@@ -53,9 +53,14 @@ func (m *MarkdownRenderer) Render(line int, es *core.EditorState) (string, error
 }
 
 func (m *MarkdownRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
+	reg.Register(ast.KindDocument, m.renderDocument)
 	reg.Register(ast.KindParagraph, m.renderParagraph)
 	reg.Register(ast.KindEmphasis, m.renderEmphasis)
 	reg.Register(ast.KindText, m.renderText)
+}
+
+func (m *MarkdownRenderer) renderDocument(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+	return ast.WalkContinue, nil
 }
 
 func (m *MarkdownRenderer) renderParagraph(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
