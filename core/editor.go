@@ -106,7 +106,7 @@ func NewEditor(filePath string, ui UserInterface, buf Buffer) *Editor {
 		currentLine: 0,
 		currentCol:  0,
 		viewMode:    RawView,
-		version:     -1,
+		version:     0,
 	}
 }
 
@@ -120,8 +120,17 @@ func (e *Editor) Start(ctx context.Context) error {
 	defer e.ui.Close()
 
 	keyCh := e.ui.GetKey(ctx)
-
+	var key *Key
 	for {
+		e.ui.Update(&EditorState{
+			LastKeyPresssed: key,
+			CurrentLine:     e.currentLine,
+			CurrentCol:      e.currentCol,
+			GetLine:         e.getLine,
+			GetAll:          e.getAll,
+			ViewMode:        e.viewMode,
+			Version:         e.version,
+		})
 		select {
 		case <-ctx.Done():
 			return nil
@@ -130,19 +139,6 @@ func (e *Editor) Start(ctx context.Context) error {
 				return nil
 			}
 			e.handleKey(key)
-			// Step 1: Handle the received key (store in buffer, update cursor, etc.)
-			// Step 2: Render the updated state to the ui
-			// fmt.Print("Curr line:", e.currentLine, " Col:", e.currentCol, "\n")
-			// fmt.Printf("Received key: %+v\n", key)
-			e.ui.Update(&EditorState{
-				LastKeyPresssed: key,
-				CurrentLine:     e.currentLine,
-				CurrentCol:      e.currentCol,
-				GetLine:         e.getLine,
-				GetAll:          e.getAll,
-				ViewMode:        e.viewMode,
-				Version:         e.version,
-			})
 		}
 	}
 }
