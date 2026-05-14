@@ -56,6 +56,7 @@ func (m *MarkdownRenderer) Render(line int, es *core.EditorState) (string, error
 func (m *MarkdownRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
 	reg.Register(ast.KindDocument, m.renderDocument)
 	reg.Register(ast.KindHeading, m.renderHeading)
+	reg.Register(ast.KindBlockquote, m.renderBlockquote)
 	reg.Register(ast.KindParagraph, m.renderParagraph)
 	reg.Register(ast.KindEmphasis, m.renderEmphasis)
 	reg.Register(ast.KindText, m.renderText)
@@ -85,13 +86,41 @@ func (m *MarkdownRenderer) renderHeading(w util.BufWriter, source []byte, node a
 	return ast.WalkContinue, nil
 }
 
+func (m *MarkdownRenderer) renderBlockquote(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+	if entering {
+		_, err := w.WriteString("\x1b[3m") // Italic and blockquote marker
+		if err != nil {
+			panic(err)
+		}
+	} else {
+		_, err := w.WriteString("\x1b[0m") // Reset
+		if err != nil {
+			panic(err)
+		}
+	}
+	return ast.WalkContinue, nil
+}
+
 func (m *MarkdownRenderer) renderParagraph(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+	n := node.(*ast.Paragraph)
 	if !entering {
 		_, err := w.WriteString("\n\n")
 		if err != nil {
 			panic(err)
 		}
+	} else {
+		parent := n.Parent()
+		if parent != nil {
+			switch parent.Kind() {
+			case ast.KindBlockquote:
+				_, err := w.WriteString("> ")
+				if err != nil {
+					panic(err)
+				}
+			}
+		}
 	}
+
 	return ast.WalkContinue, nil
 }
 
@@ -121,5 +150,20 @@ func (m *MarkdownRenderer) renderText(w util.BufWriter, source []byte, node ast.
 	}
 	n := node.(*ast.Text)
 	_, err := w.Write(n.Segment.Value(source))
+	if err != nil {
+		panic(err)
+	}
+	if n.SoftLineBreak() {
+		_, err := w.WriteString(" ")
+		if err != nil {
+			panic(err)
+		}
+	}
+	if n.HardLineBreak() {
+		_, err := w.WriteString("\n")
+		if err != nil {
+			panic(err)
+		}
+	}
 	return ast.WalkContinue, err
 }
