@@ -167,11 +167,26 @@ func (e *Editor) loadFile() error {
 	return nil
 }
 
+func (e *Editor) saveFile() error {
+	if e.filePath == "" {
+		panic("editor filePath cannot be empty")
+	}
+	f, err := os.Create(e.filePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = e.buf.WriteTo(f)
+	return err
+}
+
 func (e *Editor) handleKey(key *Key) {
 	if e.viewMode == MarkdownView {
 		switch key.Code {
 		case ToggleViewMode:
 			e.toggleViewMode()
+		case Save:
+			e.saveFile()
 		}
 		return
 	}
@@ -203,6 +218,8 @@ func (e *Editor) handleKey(key *Key) {
 			e.moveCursorRight()
 		case ToggleViewMode:
 			e.toggleViewMode()
+		case Save:
+			e.saveFile()
 		}
 	}
 	e.debug()
