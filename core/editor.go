@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"unicode/utf8"
 
 	"github.com/joshtyf/inky/log"
@@ -84,6 +85,7 @@ type EditorState struct {
 const VERSION_MODULO = 1000000
 
 type Editor struct {
+	filePath    string
 	ui          UserInterface
 	buf         Buffer
 	lineMap     []int
@@ -94,9 +96,10 @@ type Editor struct {
 	version     int
 }
 
-func NewEditor(ui UserInterface, buf Buffer) *Editor {
+func NewEditor(filePath string, ui UserInterface, buf Buffer) *Editor {
 	lineMap := make([]int, 1)
 	return &Editor{
+		filePath:    filePath,
 		ui:          ui,
 		buf:         buf,
 		lineMap:     lineMap,
@@ -108,6 +111,9 @@ func NewEditor(ui UserInterface, buf Buffer) *Editor {
 }
 
 func (e *Editor) Start(ctx context.Context) error {
+	if err := e.loadFile(); err != nil {
+		return err
+	}
 	if err := e.ui.Init(); err != nil {
 		return err
 	}
@@ -139,6 +145,30 @@ func (e *Editor) Start(ctx context.Context) error {
 			})
 		}
 	}
+}
+
+func (e *Editor) loadFile() error {
+	if e.filePath == "" {
+		return nil
+	}
+	f, err := os.ReadFile(e.filePath)
+	if err != nil {
+		return fmt.Errorf("error opening file at path '%s': %w", e.filePath, err)
+	}
+	i := 0
+	for i < len(f) {
+		r, size := utf8.DecodeRune(f[i:])
+		if r == utf8.RuneError {
+			if size == 1 {
+				return fmt.Errorf("error decoding rune: invalid byte sequence %v", f[i:])
+			} else {
+				return fmt.Errorf("error decoding rune: empty byte sequence")
+			}
+		}
+		e.insertRune(r)
+		i += size
+	}
+	return nil
 }
 
 func (e *Editor) handleKey(key *Key) {

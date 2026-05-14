@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"os/signal"
 	"syscall"
 
@@ -11,7 +12,10 @@ import (
 )
 
 func main() {
-	editor := core.NewEditor(terminal.NewTerminal(), buffer.NewGapBuffer())
+	var filePath string
+	flag.StringVar(&filePath, "file", "", "Path to file to open")
+	flag.Parse()
+	editor := core.NewEditor(filePath, terminal.NewTerminal(), buffer.NewGapBuffer())
 	ctx, _ := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	if err := editor.Start(ctx); err != nil {
 		panic(err)
