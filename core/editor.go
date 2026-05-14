@@ -149,7 +149,7 @@ func (e *Editor) loadFile() error {
 	}
 	f, err := os.ReadFile(e.filePath)
 	if err != nil {
-		return fmt.Errorf("error opening file at path '%s': %w", e.filePath, err)
+		return err
 	}
 	i := 0
 	for i < len(f) {

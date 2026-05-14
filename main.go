@@ -20,6 +20,6 @@ func main() {
 	editor := core.NewEditor(filePath, terminal.NewTerminal(), buffer.NewGapBuffer())
 	ctx, _ := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	if err := editor.Start(ctx); err != nil {
-		panic(err)
+		println(err.Error())
 	}
 }
