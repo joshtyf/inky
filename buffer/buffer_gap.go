@@ -158,39 +158,6 @@ func (gb *GapBuffer) ReadAll() []byte {
 	return contents
 }
 
-// TODO: deprecate this function
-// func (gb *GapBuffer) InsertByte(b byte, cursor int) {
-// 	if gb.getGapSize() == 0 {
-// 		gb.resizeBuffer(len(gb.buffer) + 1)
-// 	}
-// 	if gb.latestChange == nil || cursor != gb.latestChange.Cursor+gb.latestChange.Length || len(gb.latestChange.Data) > 0 {
-// 		gb.save()
-// 		gb.latestChange = &ChangeNode{
-// 			Cursor: cursor,
-// 			Length: 0,
-// 			Data:   make([]byte, 0),
-// 		}
-// 	}
-// 	pos := gb.cursorToBufferPos(cursor)
-// 	if pos <= gb.gapStart {
-// 		gb.shiftGapStartTo(pos)
-// 	} else {
-// 		gb.shiftGapEndTo(pos)
-// 	}
-// 	gb.buffer[gb.gapStart] = b
-// 	gb.gapStart += 1
-// 	gb.latestChange.Length += 1
-// 	// If inserted byte is a whitespace or newline, we need to save the buffer
-// 	if b == ' ' || b == '\n' {
-// 		gb.save()
-// 		gb.latestChange = &ChangeNode{
-// 			Cursor: cursor + 1, // Next change will start after the inserted byte
-// 			Length: 0,
-// 			Data:   make([]byte, 0),
-// 		}
-// 	}
-// }
-
 func (gb *GapBuffer) InsertRune(r rune, cursor int) {
 	// encode rune without an intermediate string allocation
 	rawBytes := make([]byte, utf8.RuneLen(r))
@@ -238,35 +205,6 @@ func (gb *GapBuffer) DeleteRune(cursor int) rune {
 	gb.gapEnd += size
 	return r
 }
-
-// TODO: deprecate this function
-// func (gb *GapBuffer) DeleteByte(cursor int) {
-// 	if gb.Len() == 0 {
-// 		panic("buffer: cannot delete byte from an empty buffer")
-// 	}
-// 	if cursor >= gb.Len() {
-// 		panic(fmt.Sprintf("buffer: cursor out of range: %d, buffer length: %d", cursor, gb.Len()))
-// 	}
-// 	if gb.latestChange == nil || cursor != gb.latestChange.Cursor-gb.latestChange.Length || len(gb.latestChange.Data) == 0 {
-// 		gb.save()
-// 		gb.latestChange = &ChangeNode{
-// 			Cursor: cursor,
-// 			Length: 0,
-// 			Data:   make([]byte, 0),
-// 		}
-// 	}
-// 	pos := gb.cursorToBufferPos(cursor)
-// 	if pos <= gb.gapStart {
-// 		gb.shiftGapStartTo(pos)
-// 	} else {
-// 		gb.shiftGapEndTo(pos)
-// 	}
-// 	byteToDelete := gb.buffer[gb.gapEnd]
-// 	clear(gb.buffer[gb.gapEnd : gb.gapEnd+1])
-// 	gb.gapEnd += 1
-// 	gb.latestChange.Length += 1
-// 	gb.latestChange.Data = append(gb.latestChange.Data, byteToDelete)
-// }
 
 func (gb *GapBuffer) GetRune(cursor int) rune {
 	if cursor < 0 || cursor >= gb.Len() {
