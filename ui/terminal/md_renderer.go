@@ -198,7 +198,7 @@ func writeCodeBox(w util.BufWriter, source []byte, node ast.Node, lang string) {
 	borderWidth := inner + 2
 	if lang != "" {
 		label := " " + lang + " "
-		dashes := max(borderWidth - 2 - len(label), 0)
+		dashes := max(borderWidth-2-len(label), 0)
 		half := dashes / 2
 		_, _ = w.WriteString("┌" + strings.Repeat("─", half) + label + strings.Repeat("─", dashes-half) + "┐\n")
 	} else {
@@ -259,7 +259,10 @@ func (m *MarkdownRenderer) renderListItem(w util.BufWriter, source []byte, node 
 		depth--
 	}
 	indent := strings.Repeat("  ", depth)
-	parent := node.Parent().(*ast.List)
+	parent, ok := node.Parent().(*ast.List)
+	if !ok {
+		panic("renderListItem: parent is not an *ast.List")
+	}
 	if parent.IsOrdered() {
 		pos := parent.Start
 		for sib := node.PreviousSibling(); sib != nil; sib = sib.PreviousSibling() {
