@@ -3,6 +3,7 @@ package terminal
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"strings"
 
 	"github.com/joshtyf/inky/core"
@@ -11,6 +12,8 @@ import (
 	"github.com/yuin/goldmark/renderer"
 	"github.com/yuin/goldmark/util"
 )
+
+const codeBlockInnerWidth = 40
 
 type MarkdownRenderer struct {
 	lastRenderedVersion int
@@ -57,9 +60,22 @@ func (m *MarkdownRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer
 	reg.Register(ast.KindDocument, m.renderDocument)
 	reg.Register(ast.KindHeading, m.renderHeading)
 	reg.Register(ast.KindBlockquote, m.renderBlockquote)
+	reg.Register(ast.KindCodeBlock, m.renderCodeBlock)
+	reg.Register(ast.KindFencedCodeBlock, m.renderFencedCodeBlock)
+	reg.Register(ast.KindHTMLBlock, m.renderHTMLBlock)
+	reg.Register(ast.KindList, m.renderList)
+	reg.Register(ast.KindListItem, m.renderListItem)
 	reg.Register(ast.KindParagraph, m.renderParagraph)
+	reg.Register(ast.KindTextBlock, m.renderTextBlock)
+	reg.Register(ast.KindThematicBreak, m.renderThematicBreak)
+	reg.Register(ast.KindAutoLink, m.renderAutoLink)
+	reg.Register(ast.KindCodeSpan, m.renderCodeSpan)
 	reg.Register(ast.KindEmphasis, m.renderEmphasis)
+	reg.Register(ast.KindImage, m.renderImage)
+	reg.Register(ast.KindLink, m.renderLink)
+	reg.Register(ast.KindRawHTML, m.renderRawHTML)
 	reg.Register(ast.KindText, m.renderText)
+	reg.Register(ast.KindString, m.renderString)
 }
 
 func (m *MarkdownRenderer) renderDocument(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
@@ -87,40 +103,23 @@ func (m *MarkdownRenderer) renderHeading(w util.BufWriter, source []byte, node a
 }
 
 func (m *MarkdownRenderer) renderBlockquote(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
-	if entering {
-		_, err := w.WriteString("\x1b[3m") // Italic and blockquote marker
-		if err != nil {
-			panic(err)
-		}
-	} else {
-		_, err := w.WriteString("\x1b[0m") // Reset
-		if err != nil {
-			panic(err)
-		}
-	}
 	return ast.WalkContinue, nil
 }
 
 func (m *MarkdownRenderer) renderParagraph(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
 	n := node.(*ast.Paragraph)
-	if !entering {
-		_, err := w.WriteString("\n\n")
-		if err != nil {
-			panic(err)
+	isBlockquote := n.Parent() != nil && n.Parent().Kind() == ast.KindBlockquote
+	if entering {
+		if isBlockquote {
+			_, _ = w.WriteString("\x1b[3m> ") // italic + blockquote marker
 		}
 	} else {
-		parent := n.Parent()
-		if parent != nil {
-			switch parent.Kind() {
-			case ast.KindBlockquote:
-				_, err := w.WriteString("> ")
-				if err != nil {
-					panic(err)
-				}
-			}
+		if isBlockquote {
+			_, _ = w.WriteString("\x1b[0m\n\n") // reset then newlines
+		} else {
+			_, _ = w.WriteString("\n\n")
 		}
 	}
-
 	return ast.WalkContinue, nil
 }
 
@@ -166,4 +165,194 @@ func (m *MarkdownRenderer) renderText(w util.BufWriter, source []byte, node ast.
 		}
 	}
 	return ast.WalkContinue, err
+}
+
+func (m *MarkdownRenderer) renderCodeBlock(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+	if !entering {
+		return ast.WalkContinue, nil
+	}
+	writeCodeBox(w, source, node, "")
+	return ast.WalkSkipChildren, nil
+}
+
+func (m *MarkdownRenderer) renderFencedCodeBlock(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+	if !entering {
+		return ast.WalkContinue, nil
+	}
+	n := node.(*ast.FencedCodeBlock)
+	lang := ""
+	if l := n.Language(source); l != nil {
+		lang = string(l)
+	}
+	writeCodeBox(w, source, node, lang)
+	return ast.WalkSkipChildren, nil
+}
+
+// writeCodeBox renders a code block as a full box:
+//
+//	┌── lang ──────────────┐
+//	│ code line            │
+//	└──────────────────────┘
+func writeCodeBox(w util.BufWriter, source []byte, node ast.Node, lang string) {
+	const inner = codeBlockInnerWidth
+	borderWidth := inner + 2
+	if lang != "" {
+		label := " " + lang + " "
+		dashes := borderWidth - 2 - len(label)
+		if dashes < 0 {
+			dashes = 0
+		}
+		half := dashes / 2
+		_, _ = w.WriteString("┌" + strings.Repeat("─", half) + label + strings.Repeat("─", dashes-half) + "┐\n")
+	} else {
+		_, _ = w.WriteString("┌" + strings.Repeat("─", borderWidth-2) + "┐\n")
+	}
+	for i := 0; i < node.Lines().Len(); i++ {
+		line := node.Lines().At(i)
+		content := strings.TrimRight(string(line.Value(source)), "\n")
+		padding := inner - 1 - len(content)
+		if padding < 0 {
+			padding = 0
+		}
+		_, _ = w.WriteString("│ " + content + strings.Repeat(" ", padding) + "│\n")
+	}
+	_, _ = w.WriteString("└" + strings.Repeat("─", borderWidth-2) + "┘\n\n")
+}
+
+func (m *MarkdownRenderer) renderCodeSpan(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+	if !entering {
+		return ast.WalkContinue, nil
+	}
+	_, _ = w.WriteString("\x1b[2m`")
+	for c := node.FirstChild(); c != nil; c = c.NextSibling() {
+		segment := c.(*ast.Text).Segment
+		value := segment.Value(source)
+		if bytes.HasSuffix(value, []byte("\n")) {
+			_, _ = w.Write(value[:len(value)-1])
+			_, _ = w.WriteString(" ")
+		} else {
+			_, _ = w.Write(value)
+		}
+	}
+	_, _ = w.WriteString("`\x1b[0m")
+	return ast.WalkSkipChildren, nil
+}
+
+func (m *MarkdownRenderer) renderList(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+	// Only emit a trailing newline for top-level lists; nested lists (whose
+	// parent is a ListItem) must not, or they produce a spurious blank line
+	// before the next sibling item in tight lists.
+	if !entering && (node.Parent() == nil || node.Parent().Kind() != ast.KindListItem) {
+		_, _ = w.WriteString("\n")
+	}
+	return ast.WalkContinue, nil
+}
+
+func (m *MarkdownRenderer) renderListItem(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+	if !entering {
+		return ast.WalkContinue, nil
+	}
+	depth := 0
+	for p := node.Parent(); p != nil; p = p.Parent() {
+		if p.Kind() == ast.KindList {
+			depth++
+		}
+	}
+	if depth > 0 {
+		depth--
+	}
+	indent := strings.Repeat("  ", depth)
+	parent := node.Parent().(*ast.List)
+	if parent.IsOrdered() {
+		pos := parent.Start
+		for sib := node.PreviousSibling(); sib != nil; sib = sib.PreviousSibling() {
+			pos++
+		}
+		_, _ = w.WriteString(fmt.Sprintf("%s%d. ", indent, pos))
+	} else {
+		_, _ = w.WriteString(indent + "• ")
+	}
+	return ast.WalkContinue, nil
+}
+
+func (m *MarkdownRenderer) renderTextBlock(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+	if !entering {
+		_, _ = w.WriteString("\n")
+	}
+	return ast.WalkContinue, nil
+}
+
+func (m *MarkdownRenderer) renderThematicBreak(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+	if entering {
+		_, _ = w.WriteString(strings.Repeat("─", 40) + "\n\n")
+	}
+	return ast.WalkContinue, nil
+}
+
+func (m *MarkdownRenderer) renderLink(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+	n := node.(*ast.Link)
+	if entering {
+		_, _ = w.WriteString("\x1b]8;;" + string(n.Destination) + "\x1b\\")
+	} else {
+		_, _ = w.WriteString("\x1b]8;;\x1b\\")
+	}
+	return ast.WalkContinue, nil
+}
+
+func (m *MarkdownRenderer) renderAutoLink(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+	if !entering {
+		return ast.WalkContinue, nil
+	}
+	n := node.(*ast.AutoLink)
+	url := string(n.URL(source))
+	label := string(n.Label(source))
+	_, _ = w.WriteString("\x1b]8;;" + url + "\x1b\\" + label + "\x1b]8;;\x1b\\")
+	return ast.WalkSkipChildren, nil
+}
+
+func (m *MarkdownRenderer) renderImage(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+	if !entering {
+		return ast.WalkContinue, nil
+	}
+	_, _ = w.WriteString("[image: ")
+	for c := node.FirstChild(); c != nil; c = c.NextSibling() {
+		if t, ok := c.(*ast.Text); ok {
+			_, _ = w.Write(t.Segment.Value(source))
+		}
+	}
+	_, _ = w.WriteString("]")
+	return ast.WalkSkipChildren, nil
+}
+
+func (m *MarkdownRenderer) renderHTMLBlock(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+	if !entering {
+		return ast.WalkContinue, nil
+	}
+	l := node.Lines().Len()
+	for i := 0; i < l; i++ {
+		line := node.Lines().At(i)
+		_, _ = w.Write(line.Value(source))
+	}
+	return ast.WalkContinue, nil
+}
+
+func (m *MarkdownRenderer) renderRawHTML(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+	if !entering {
+		return ast.WalkSkipChildren, nil
+	}
+	n := node.(*ast.RawHTML)
+	for i := 0; i < n.Segments.Len(); i++ {
+		seg := n.Segments.At(i)
+		_, _ = w.Write(seg.Value(source))
+	}
+	return ast.WalkSkipChildren, nil
+}
+
+func (m *MarkdownRenderer) renderString(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+	if !entering {
+		return ast.WalkContinue, nil
+	}
+	n := node.(*ast.String)
+	_, _ = w.Write(n.Value)
+	return ast.WalkContinue, nil
 }
