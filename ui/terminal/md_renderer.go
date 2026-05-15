@@ -88,17 +88,14 @@ func (m *MarkdownRenderer) renderDocument(w util.BufWriter, source []byte, node 
 func (m *MarkdownRenderer) renderHeading(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
 	n := node.(*ast.Heading)
 	if entering {
-		_, err := w.WriteString("\x1b[1m") // Bold
-		if err != nil {
+		if _, err := w.WriteString("\x1b[1m"); err != nil { // Bold
 			panic(err)
 		}
-		_, err = w.WriteString(strings.Repeat("#", n.Level) + " ")
-		if err != nil {
+		if _, err := w.WriteString(strings.Repeat("#", n.Level) + " "); err != nil {
 			panic(err)
 		}
 	} else {
-		_, err := w.WriteString("\x1b[0m\n\n") // Reset
-		if err != nil {
+		if _, err := w.WriteString("\x1b[0m\n\n"); err != nil { // Reset
 			panic(err)
 		}
 	}
@@ -114,13 +111,19 @@ func (m *MarkdownRenderer) renderParagraph(w util.BufWriter, source []byte, node
 	isBlockquote := n.Parent() != nil && n.Parent().Kind() == ast.KindBlockquote
 	if entering {
 		if isBlockquote {
-			_, _ = w.WriteString("\x1b[3m> ") // italic + blockquote marker
+			if _, err := w.WriteString("\x1b[3m> "); err != nil { // italic + blockquote marker
+				panic(err)
+			}
 		}
 	} else {
 		if isBlockquote {
-			_, _ = w.WriteString("\x1b[0m\n\n") // reset then newlines
+			if _, err := w.WriteString("\x1b[0m\n\n"); err != nil { // reset then newlines
+				panic(err)
+			}
 		} else {
-			_, _ = w.WriteString("\n\n")
+			if _, err := w.WriteString("\n\n"); err != nil {
+				panic(err)
+			}
 		}
 	}
 	return ast.WalkContinue, nil
@@ -133,13 +136,11 @@ func (m *MarkdownRenderer) renderEmphasis(w util.BufWriter, source []byte, node 
 		if n.Level == 2 {
 			tag = "\x1b[1m" // Bold
 		}
-		_, err := w.WriteString(tag)
-		if err != nil {
+		if _, err := w.WriteString(tag); err != nil {
 			panic(err)
 		}
 	} else {
-		_, err := w.WriteString("\x1b[0m") // Reset
-		if err != nil {
+		if _, err := w.WriteString("\x1b[0m"); err != nil { // Reset
 			panic(err)
 		}
 	}
@@ -151,23 +152,20 @@ func (m *MarkdownRenderer) renderText(w util.BufWriter, source []byte, node ast.
 		return ast.WalkContinue, nil
 	}
 	n := node.(*ast.Text)
-	_, err := w.Write(n.Segment.Value(source))
-	if err != nil {
+	if _, err := w.Write(n.Segment.Value(source)); err != nil {
 		panic(err)
 	}
 	if n.SoftLineBreak() {
-		_, err := w.WriteString(" ")
-		if err != nil {
+		if _, err := w.WriteString(" "); err != nil {
 			panic(err)
 		}
 	}
 	if n.HardLineBreak() {
-		_, err := w.WriteString("\n")
-		if err != nil {
+		if _, err := w.WriteString("\n"); err != nil {
 			panic(err)
 		}
 	}
-	return ast.WalkContinue, err
+	return ast.WalkContinue, nil
 }
 
 func (m *MarkdownRenderer) renderCodeBlock(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
@@ -203,9 +201,13 @@ func writeCodeBox(w util.BufWriter, source []byte, node ast.Node, lang string) {
 		label := " " + lang + " "
 		dashes := max(borderWidth-2-len(label), 0)
 		half := dashes / 2
-		_, _ = w.WriteString("┌" + strings.Repeat("─", half) + label + strings.Repeat("─", dashes-half) + "┐\n")
+		if _, err := w.WriteString("┌" + strings.Repeat("─", half) + label + strings.Repeat("─", dashes-half) + "┐\n"); err != nil {
+			panic(err)
+		}
 	} else {
-		_, _ = w.WriteString("┌" + strings.Repeat("─", borderWidth-2) + "┐\n")
+		if _, err := w.WriteString("┌" + strings.Repeat("─", borderWidth-2) + "┐\n"); err != nil {
+			panic(err)
+		}
 	}
 	for i := 0; i < node.Lines().Len(); i++ {
 		line := node.Lines().At(i)
@@ -214,27 +216,41 @@ func writeCodeBox(w util.BufWriter, source []byte, node ast.Node, lang string) {
 		if padding < 0 {
 			padding = 0
 		}
-		_, _ = w.WriteString("│ " + content + strings.Repeat(" ", padding) + "│\n")
+		if _, err := w.WriteString("│ " + content + strings.Repeat(" ", padding) + "│\n"); err != nil {
+			panic(err)
+		}
 	}
-	_, _ = w.WriteString("└" + strings.Repeat("─", borderWidth-2) + "┘\n\n")
+	if _, err := w.WriteString("└" + strings.Repeat("─", borderWidth-2) + "┘\n\n"); err != nil {
+		panic(err)
+	}
 }
 
 func (m *MarkdownRenderer) renderCodeSpan(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
 	if !entering {
 		return ast.WalkContinue, nil
 	}
-	_, _ = w.WriteString("\x1b[2m`")
+	if _, err := w.WriteString("\x1b[2m`"); err != nil {
+		panic(err)
+	}
 	for c := node.FirstChild(); c != nil; c = c.NextSibling() {
 		segment := c.(*ast.Text).Segment
 		value := segment.Value(source)
 		if bytes.HasSuffix(value, []byte("\n")) {
-			_, _ = w.Write(value[:len(value)-1])
-			_, _ = w.WriteString(" ")
+			if _, err := w.Write(value[:len(value)-1]); err != nil {
+				panic(err)
+			}
+			if _, err := w.WriteString(" "); err != nil {
+				panic(err)
+			}
 		} else {
-			_, _ = w.Write(value)
+			if _, err := w.Write(value); err != nil {
+				panic(err)
+			}
 		}
 	}
-	_, _ = w.WriteString("`\x1b[0m")
+	if _, err := w.WriteString("`\x1b[0m"); err != nil {
+		panic(err)
+	}
 	return ast.WalkSkipChildren, nil
 }
 
@@ -243,7 +259,9 @@ func (m *MarkdownRenderer) renderList(w util.BufWriter, source []byte, node ast.
 	// parent is a ListItem) must not, or they produce a spurious blank line
 	// before the next sibling item in tight lists.
 	if !entering && (node.Parent() == nil || node.Parent().Kind() != ast.KindListItem) {
-		_, _ = w.WriteString("\n")
+		if _, err := w.WriteString("\n"); err != nil {
+			panic(err)
+		}
 	}
 	return ast.WalkContinue, nil
 }
@@ -271,23 +289,31 @@ func (m *MarkdownRenderer) renderListItem(w util.BufWriter, source []byte, node 
 		for sib := node.PreviousSibling(); sib != nil; sib = sib.PreviousSibling() {
 			pos++
 		}
-		_, _ = fmt.Fprintf(w, "%s%d. ", indent, pos)
+		if _, err := fmt.Fprintf(w, "%s%d. ", indent, pos); err != nil {
+			panic(err)
+		}
 	} else {
-		_, _ = w.WriteString(indent + "• ")
+		if _, err := w.WriteString(indent + "• "); err != nil {
+			panic(err)
+		}
 	}
 	return ast.WalkContinue, nil
 }
 
 func (m *MarkdownRenderer) renderTextBlock(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
 	if !entering {
-		_, _ = w.WriteString("\n")
+		if _, err := w.WriteString("\n"); err != nil {
+			panic(err)
+		}
 	}
 	return ast.WalkContinue, nil
 }
 
 func (m *MarkdownRenderer) renderThematicBreak(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
 	if entering {
-		_, _ = w.WriteString(strings.Repeat("─", thematicBreakWidth) + "\n\n")
+		if _, err := w.WriteString(strings.Repeat("─", thematicBreakWidth) + "\n\n"); err != nil {
+			panic(err)
+		}
 	}
 	return ast.WalkContinue, nil
 }
@@ -295,9 +321,13 @@ func (m *MarkdownRenderer) renderThematicBreak(w util.BufWriter, source []byte, 
 func (m *MarkdownRenderer) renderLink(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
 	n := node.(*ast.Link)
 	if entering {
-		_, _ = w.WriteString("\x1b]8;;" + string(n.Destination) + "\x1b\\")
+		if _, err := w.WriteString("\x1b]8;;" + string(n.Destination) + "\x1b\\"); err != nil {
+			panic(err)
+		}
 	} else {
-		_, _ = w.WriteString("\x1b]8;;\x1b\\")
+		if _, err := w.WriteString("\x1b]8;;\x1b\\"); err != nil {
+			panic(err)
+		}
 	}
 	return ast.WalkContinue, nil
 }
@@ -309,7 +339,9 @@ func (m *MarkdownRenderer) renderAutoLink(w util.BufWriter, source []byte, node 
 	n := node.(*ast.AutoLink)
 	url := string(n.URL(source))
 	label := string(n.Label(source))
-	_, _ = w.WriteString("\x1b]8;;" + url + "\x1b\\" + label + "\x1b]8;;\x1b\\")
+	if _, err := w.WriteString("\x1b]8;;" + url + "\x1b\\" + label + "\x1b]8;;\x1b\\"); err != nil {
+		panic(err)
+	}
 	return ast.WalkSkipChildren, nil
 }
 
@@ -317,13 +349,19 @@ func (m *MarkdownRenderer) renderImage(w util.BufWriter, source []byte, node ast
 	if !entering {
 		return ast.WalkContinue, nil
 	}
-	_, _ = w.WriteString("[image: ")
+	if _, err := w.WriteString("[image: "); err != nil {
+		panic(err)
+	}
 	for c := node.FirstChild(); c != nil; c = c.NextSibling() {
 		if t, ok := c.(*ast.Text); ok {
-			_, _ = w.Write(t.Segment.Value(source))
+			if _, err := w.Write(t.Segment.Value(source)); err != nil {
+				panic(err)
+			}
 		}
 	}
-	_, _ = w.WriteString("]")
+	if _, err := w.WriteString("]"); err != nil {
+		panic(err)
+	}
 	return ast.WalkSkipChildren, nil
 }
 
@@ -334,7 +372,9 @@ func (m *MarkdownRenderer) renderHTMLBlock(w util.BufWriter, source []byte, node
 	l := node.Lines().Len()
 	for i := range l {
 		line := node.Lines().At(i)
-		_, _ = w.Write(line.Value(source))
+		if _, err := w.Write(line.Value(source)); err != nil {
+			panic(err)
+		}
 	}
 	return ast.WalkContinue, nil
 }
@@ -346,7 +386,9 @@ func (m *MarkdownRenderer) renderRawHTML(w util.BufWriter, source []byte, node a
 	n := node.(*ast.RawHTML)
 	for i := 0; i < n.Segments.Len(); i++ {
 		seg := n.Segments.At(i)
-		_, _ = w.Write(seg.Value(source))
+		if _, err := w.Write(seg.Value(source)); err != nil {
+			panic(err)
+		}
 	}
 	return ast.WalkSkipChildren, nil
 }
@@ -356,6 +398,8 @@ func (m *MarkdownRenderer) renderString(w util.BufWriter, source []byte, node as
 		return ast.WalkContinue, nil
 	}
 	n := node.(*ast.String)
-	_, _ = w.Write(n.Value)
+	if _, err := w.Write(n.Value); err != nil {
+		panic(err)
+	}
 	return ast.WalkContinue, nil
 }
