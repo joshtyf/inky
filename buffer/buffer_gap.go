@@ -43,7 +43,6 @@ func (gb *GapBuffer) shiftGapEndTo(pos int) {
 		toMove := gb.buffer[gb.gapEnd : gb.gapEnd+delta]
 		toFill := gb.buffer[gb.gapStart : gb.gapStart+delta]
 		copy(toFill, toMove)
-		clear(gb.buffer[pos-gb.getGapSize() : pos])
 		gb.gapStart += delta
 		gb.gapEnd += delta
 	}
@@ -58,7 +57,6 @@ func (gb *GapBuffer) shiftGapStartTo(pos int) {
 		toMove := gb.buffer[gb.gapStart-delta : gb.gapStart]
 		toFill := gb.buffer[gb.gapEnd-delta : gb.gapEnd]
 		copy(toFill, toMove)
-		clear(gb.buffer[pos : pos+gb.getGapSize()])
 		gb.gapStart -= delta
 		gb.gapEnd -= delta
 	}
@@ -110,10 +108,11 @@ func (gb *GapBuffer) ReverseSeekToChar(cursor int, char byte, count int) int {
 	pos := gb.cursorToBufferPos(cursor)
 	for i, dist := pos, 0; i >= 0; i, dist = i-1, dist+1 {
 		if i == gb.gapEnd {
+			// jump to just before the gap; counteract the post-decrement so dist
+			// stays accurate (the gap bytes are not content)
 			i = gb.gapStart
-			if i < 0 {
-				break
-			}
+			dist--
+			continue
 		}
 		if gb.buffer[i] == char {
 			count--
@@ -130,15 +129,18 @@ func (gb *GapBuffer) Read(cursor int, length int) []byte {
 		panic(fmt.Sprintf("buffer: negative length %d received", length))
 	}
 	pos := gb.cursorToBufferPos(cursor)
-	contents := make([]byte, 0)
-	for i := pos; i < len(gb.buffer) && len(contents) < length; i++ {
-		if i == gb.gapStart {
-			i = gb.gapEnd
-			if i >= len(gb.buffer) {
-				break
-			}
+	contents := make([]byte, 0, length)
+	if pos < gb.gapStart {
+		beforeGapEnd := min(gb.gapStart, pos+length)
+		contents = append(contents, gb.buffer[pos:beforeGapEnd]...)
+		remaining := length - (beforeGapEnd - pos)
+		if remaining > 0 {
+			afterGapEnd := min(gb.gapEnd+remaining, len(gb.buffer))
+			contents = append(contents, gb.buffer[gb.gapEnd:afterGapEnd]...)
 		}
-		contents = append(contents, gb.buffer[i])
+	} else {
+		end := min(pos+length, len(gb.buffer))
+		contents = append(contents, gb.buffer[pos:end]...)
 	}
 	return contents
 }
@@ -151,12 +153,10 @@ func (gb *GapBuffer) ReadAll() []byte {
 }
 
 func (gb *GapBuffer) InsertRune(r rune, cursor int) {
-	// encode rune without an intermediate string allocation
-	rawBytes := make([]byte, utf8.RuneLen(r))
-	utf8.EncodeRune(rawBytes, r)
-	if gb.getGapSize() < len(rawBytes) {
-		// request additional bytes equal to the rune length
-		gb.resizeBuffer(len(rawBytes))
+	var rawBytes [utf8.UTFMax]byte
+	size := utf8.EncodeRune(rawBytes[:], r)
+	if gb.getGapSize() < size {
+		gb.resizeBuffer(size)
 	}
 	pos := gb.cursorToBufferPos(cursor)
 	if pos <= gb.gapStart {
@@ -164,8 +164,8 @@ func (gb *GapBuffer) InsertRune(r rune, cursor int) {
 	} else {
 		gb.shiftGapEndTo(pos)
 	}
-	copy(gb.buffer[gb.gapStart:gb.gapStart+len(rawBytes)], rawBytes)
-	gb.gapStart += len(rawBytes)
+	copy(gb.buffer[gb.gapStart:gb.gapStart+size], rawBytes[:size])
+	gb.gapStart += size
 }
 
 func (gb *GapBuffer) DeleteRune(cursor int) rune {
@@ -199,10 +199,16 @@ func (gb *GapBuffer) GetRune(cursor int) rune {
 		panic(fmt.Sprintf("buffer: cursor out of range: %d, buffer length: %d", cursor, gb.Len()))
 	}
 	pos := gb.cursorToBufferPos(cursor)
-	r, size := utf8.DecodeRune(gb.buffer[pos:])
+	var byteSequence []byte
+	if pos < gb.gapStart {
+		byteSequence = gb.buffer[pos:gb.gapStart]
+	} else {
+		byteSequence = gb.buffer[pos:]
+	}
+	r, size := utf8.DecodeRune(byteSequence)
 	if r == utf8.RuneError {
 		if size == 1 {
-			panic(fmt.Sprintf("buffer: error decoding rune: invalid byte sequence %v", gb.buffer[pos:]))
+			panic(fmt.Sprintf("buffer: error decoding rune: invalid byte sequence %v", byteSequence))
 		} else {
 			panic("buffer: error decoding rune: empty byte sequence")
 		}
