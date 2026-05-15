@@ -34,13 +34,6 @@ func (gb *GapBuffer) cursorToBufferPos(cursor int) int {
 	return cursor + gb.getGapSize()
 }
 
-func (gb *GapBuffer) bufferPosToCursor(pos int) int {
-	if pos <= gb.gapStart {
-		return pos
-	}
-	return pos - gb.getGapSize()
-}
-
 func (gb *GapBuffer) shiftGapEndTo(pos int) {
 	if pos < gb.gapEnd || pos > len(gb.buffer) {
 		panic(fmt.Sprintf("buffer: position out of range: %d, gap end: %d, buffer length: %d", pos, gb.gapEnd, len(gb.buffer)))
@@ -168,7 +161,6 @@ func (gb *GapBuffer) InsertRune(r rune, cursor int) {
 	}
 	// TODO: add undo support for inserting runes
 	pos := gb.cursorToBufferPos(cursor)
-	// TODO: handle multi-byte runes
 	if pos <= gb.gapStart {
 		gb.shiftGapStartTo(pos)
 	} else {
@@ -176,7 +168,6 @@ func (gb *GapBuffer) InsertRune(r rune, cursor int) {
 	}
 	copy(gb.buffer[gb.gapStart:gb.gapStart+len(rawBytes)], rawBytes)
 	gb.gapStart += len(rawBytes)
-	// TODO: handle the case where the inserted rune is a newline
 }
 
 func (gb *GapBuffer) DeleteRune(cursor int) rune {
