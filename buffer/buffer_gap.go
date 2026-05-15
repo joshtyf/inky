@@ -28,7 +28,7 @@ func (gb *GapBuffer) cursorToBufferPos(cursor int) int {
 	if cursor < 0 || cursor > gb.Len() {
 		panic(fmt.Sprintf("buffer: cursor out of range: %d, buffer length: %d", cursor, gb.Len()))
 	}
-	if cursor <= gb.gapStart {
+	if cursor < gb.gapStart {
 		return cursor
 	}
 	return cursor + gb.getGapSize()
