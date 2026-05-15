@@ -13,7 +13,10 @@ import (
 	"github.com/yuin/goldmark/util"
 )
 
-const codeBlockInnerWidth = 40
+const (
+	codeBlockInnerWidth = 40
+	thematicBreakWidth  = 40
+)
 
 type MarkdownRenderer struct {
 	lastRenderedVersion int
@@ -284,7 +287,7 @@ func (m *MarkdownRenderer) renderTextBlock(w util.BufWriter, source []byte, node
 
 func (m *MarkdownRenderer) renderThematicBreak(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
 	if entering {
-		_, _ = w.WriteString(strings.Repeat("─", 40) + "\n\n")
+		_, _ = w.WriteString(strings.Repeat("─", thematicBreakWidth) + "\n\n")
 	}
 	return ast.WalkContinue, nil
 }
