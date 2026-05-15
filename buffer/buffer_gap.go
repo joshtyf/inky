@@ -82,7 +82,6 @@ func (gb *GapBuffer) resizeBuffer(requiredSize int) {
 }
 
 func (gb *GapBuffer) SeekToChar(cursor int, char byte, count int) int {
-	// TODO: add a test case to account for when i jumps over the gap
 	if count <= 0 {
 		panic(fmt.Sprintf("buffer: expect positive count, got %d instead", count))
 	}
@@ -159,7 +158,6 @@ func (gb *GapBuffer) InsertRune(r rune, cursor int) {
 		// request additional bytes equal to the rune length
 		gb.resizeBuffer(len(rawBytes))
 	}
-	// TODO: add undo support for inserting runes
 	pos := gb.cursorToBufferPos(cursor)
 	if pos <= gb.gapStart {
 		gb.shiftGapStartTo(pos)
@@ -177,7 +175,6 @@ func (gb *GapBuffer) DeleteRune(cursor int) rune {
 	if cursor >= gb.Len() {
 		panic(fmt.Sprintf("buffer: cursor out of range: %d, buffer length: %d", cursor, gb.Len()))
 	}
-	// TODO: add undo support for deleting runes
 	pos := gb.cursorToBufferPos(cursor)
 	if pos <= gb.gapStart {
 		gb.shiftGapStartTo(pos)
