@@ -33,6 +33,7 @@ var keyMapping = map[string]core.Key{
 
 type Renderer interface {
 	Render(line int, es *core.EditorState) (string, error)
+	LastLine(es *core.EditorState) int
 }
 
 var renderers = map[core.ViewMode]Renderer{
@@ -41,10 +42,12 @@ var renderers = map[core.ViewMode]Renderer{
 }
 
 type Terminal struct {
-	topLine      int
-	currentLine  int
-	screenHeight int
-	renderCache  []string
+	topLine                 int
+	currentLine             int
+	screenHeight            int
+	renderCache             []string
+	markdownViewCurrentLine int
+	lastContentVersion      int
 }
 
 func NewTerminal() *Terminal {
@@ -53,10 +56,12 @@ func NewTerminal() *Terminal {
 		panic("error getting terminal size: " + err.Error())
 	}
 	return &Terminal{
-		topLine:      0,
-		currentLine:  0,
-		screenHeight: h,
-		renderCache:  make([]string, h),
+		topLine:                 0,
+		currentLine:             0,
+		screenHeight:            h,
+		renderCache:             make([]string, h),
+		markdownViewCurrentLine: 0,
+		lastContentVersion:      -1,
 	}
 }
 
@@ -151,7 +156,27 @@ func (t *Terminal) GetKey(ctx context.Context) <-chan *core.Key {
 }
 
 func (t *Terminal) Update(es *core.EditorState) error {
-	t.moveCursor(es.CurrentLine+1, es.CurrentCol+1) // Add 1 because terminal escape codes are 1-indexed
+	if es.Version != t.lastContentVersion {
+		t.markdownViewCurrentLine = 0
+		t.lastContentVersion = es.Version
+	}
+	if es.ViewMode == core.MarkdownView && es.LastKeyPresssed != nil {
+		switch es.LastKeyPresssed.Code {
+		case core.ArrowDown:
+			if t.markdownViewCurrentLine < renderers[core.MarkdownView].LastLine(es) {
+				t.markdownViewCurrentLine++
+			}
+		case core.ArrowUp:
+			if t.markdownViewCurrentLine > 0 {
+				t.markdownViewCurrentLine--
+			}
+		}
+	}
+	if es.ViewMode == core.MarkdownView {
+		t.moveCursor(t.markdownViewCurrentLine+1, 1)
+	} else {
+		t.moveCursor(es.CursorCurrentLine+1, es.CursorCurrentCol+1)
+	}
 	t.updateTextCache(es)
 	t.renderText()
 	t.renderUI(es)
@@ -188,18 +213,25 @@ func (t *Terminal) renderText() {
 }
 
 func (t *Terminal) renderUI(es *core.EditorState) {
-	if es.ViewMode == core.MarkdownView {
-		fmt.Print("\x1b[?25l") // Hide cursor in markdown view
-	} else {
-		fmt.Print("\x1b[?25h") // Show cursor in raw view
-	}
 	viewMode := "Raw"
 	if es.ViewMode == core.MarkdownView {
 		viewMode = "Markdown"
 	}
-	status := fmt.Sprintf("Line: %d, Col: %d, Mode: %s", es.CurrentLine+1, es.CurrentCol+1, viewMode)
+	status := fmt.Sprintf("Line: %d, Col: %d, Mode: %s", es.CursorCurrentLine+1, es.CursorCurrentCol+1, viewMode)
 	fmt.Print("\x1b[s") // Save cursor
+	if es.ViewMode == core.MarkdownView {
+		cacheIdx := t.markdownViewCurrentLine - t.topLine
+		if cacheIdx >= 0 && cacheIdx < t.screenHeight-1 {
+			fmt.Printf("\x1b[%d;1H\x1b[2K%s", cacheIdx+1, highlightLine(t.renderCache[cacheIdx]))
+		}
+	}
 	// Highlight the status line with inverse colors
 	fmt.Printf("\x1b[%d;1H\x1b[7m\x1b[2K%s\x1b[0m", t.screenHeight, status) // Move to the last line, clear it, and print the status
 	fmt.Print("\x1b[u")                                                     // Restore cursor
+}
+
+func highlightLine(line string) string {
+	const reset = "\x1b[0m"
+	const highlight = "\x1b[7m"
+	return highlight + strings.ReplaceAll(line, reset, reset+highlight) + reset
 }

@@ -73,13 +73,14 @@ type Buffer interface {
 }
 
 type EditorState struct {
-	LastKeyPresssed *Key
-	CurrentLine     int
-	CurrentCol      int
-	GetLine         func(lineNumber int) []rune // TODO: should we return bytes or runes?
-	GetAll          func() []byte
-	ViewMode        ViewMode
-	Version         int
+	LastKeyPresssed       *Key
+	CursorCurrentLine     int
+	CursorCurrentCol      int
+	DocumentMaxLineLength int
+	GetLine               func(lineNumber int) []rune // TODO: should we return bytes or runes?
+	GetAll                func() []byte
+	ViewMode              ViewMode
+	Version               int
 }
 
 const VERSION_MODULO = 1000000
@@ -121,21 +122,23 @@ func (e *Editor) Start(ctx context.Context) error {
 
 	keyCh := e.ui.GetKey(ctx)
 	var key *Key
+	var keyChOpen bool
 	for {
 		e.ui.Update(&EditorState{
-			LastKeyPresssed: key,
-			CurrentLine:     e.currentLine,
-			CurrentCol:      e.currentCol,
-			GetLine:         e.getLine,
-			GetAll:          e.getAll,
-			ViewMode:        e.viewMode,
-			Version:         e.version,
+			LastKeyPresssed:       key,
+			CursorCurrentLine:     e.currentLine,
+			CursorCurrentCol:      e.currentCol,
+			DocumentMaxLineLength: len(e.lineMap),
+			GetLine:               e.getLine,
+			GetAll:                e.getAll,
+			ViewMode:              e.viewMode,
+			Version:               e.version,
 		})
 		select {
 		case <-ctx.Done():
 			return nil
-		case key, ok := <-keyCh:
-			if !ok {
+		case key, keyChOpen = <-keyCh:
+			if !keyChOpen {
 				return nil
 			}
 			e.handleKey(key)

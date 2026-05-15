@@ -16,6 +16,10 @@ func NewRawRenderer() *RawRenderer {
 	}
 }
 
+func (r *RawRenderer) LastLine(es *core.EditorState) int {
+	return es.DocumentMaxLineLength - 1
+}
+
 func (r *RawRenderer) Render(line int, es *core.EditorState) (string, error) {
 	if r.renderCache == nil || es.Version != r.lastRenderedVersion {
 		r.renderCache = make(map[int]string)
