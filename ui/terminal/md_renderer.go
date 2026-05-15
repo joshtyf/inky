@@ -198,10 +198,7 @@ func writeCodeBox(w util.BufWriter, source []byte, node ast.Node, lang string) {
 	borderWidth := inner + 2
 	if lang != "" {
 		label := " " + lang + " "
-		dashes := borderWidth - 2 - len(label)
-		if dashes < 0 {
-			dashes = 0
-		}
+		dashes := max(borderWidth - 2 - len(label), 0)
 		half := dashes / 2
 		_, _ = w.WriteString("┌" + strings.Repeat("─", half) + label + strings.Repeat("─", dashes-half) + "┐\n")
 	} else {
@@ -268,7 +265,7 @@ func (m *MarkdownRenderer) renderListItem(w util.BufWriter, source []byte, node 
 		for sib := node.PreviousSibling(); sib != nil; sib = sib.PreviousSibling() {
 			pos++
 		}
-		_, _ = w.WriteString(fmt.Sprintf("%s%d. ", indent, pos))
+		_, _ = fmt.Fprintf(w, "%s%d. ", indent, pos)
 	} else {
 		_, _ = w.WriteString(indent + "• ")
 	}
@@ -329,7 +326,7 @@ func (m *MarkdownRenderer) renderHTMLBlock(w util.BufWriter, source []byte, node
 		return ast.WalkContinue, nil
 	}
 	l := node.Lines().Len()
-	for i := 0; i < l; i++ {
+	for i := range l {
 		line := node.Lines().At(i)
 		_, _ = w.Write(line.Value(source))
 	}
