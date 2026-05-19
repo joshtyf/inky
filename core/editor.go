@@ -119,7 +119,8 @@ func (e *Editor) Start(ctx context.Context) error {
 		return err
 	}
 	defer e.ui.Close()
-
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	keyCh := e.ui.GetKey(ctx)
 	var key *Key
 	var keyChOpen bool
@@ -141,7 +142,9 @@ func (e *Editor) Start(ctx context.Context) error {
 			if !keyChOpen {
 				return nil
 			}
-			e.handleKey(key)
+			if err := e.handleKey(key); err != nil {
+				return err
+			}
 		}
 	}
 }
@@ -183,8 +186,10 @@ func (e *Editor) saveFile() error {
 	return err
 }
 
-func (e *Editor) handleKey(key *Key) {
+func (e *Editor) handleKey(key *Key) error {
 	switch {
+	case key.Code == CtrlD:
+		return &EditorClosedError{}
 	case key.Code == ToggleViewMode:
 		e.toggleViewMode()
 	case key.Code == Save:
@@ -203,6 +208,7 @@ func (e *Editor) handleKey(key *Key) {
 		e.recordOperation(op)
 	}
 	e.debug()
+	return nil
 }
 
 func (e *Editor) getOperationFromKey(key *Key) Operation {
