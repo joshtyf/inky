@@ -372,7 +372,6 @@ func (e *Editor) getLine(lineNumber int) []rune {
 	return runes
 }
 
-// TODO: improve this
 func (e *Editor) getAll() []byte {
 	return e.buf.ReadAll()
 }
