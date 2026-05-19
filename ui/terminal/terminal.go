@@ -172,24 +172,28 @@ func (t *Terminal) Update(es *core.EditorState) error {
 			}
 		}
 	}
+	var targetLine, targetCol int
 	if es.ViewMode == core.MarkdownView {
-		t.moveCursor(t.markdownViewCurrentLine+1, 1)
+		targetLine = t.markdownViewCurrentLine + 1
+		targetCol = 1
 	} else {
-		t.moveCursor(es.CursorCurrentLine+1, es.CursorCurrentCol+1)
+		targetLine = es.CursorCurrentLine + 1
+		targetCol = es.CursorCurrentCol + 1
 	}
+	// Update topLine for scrolling before rendering
+	if targetLine >= t.topLine+t.screenHeight {
+		t.topLine = targetLine - t.screenHeight + 1
+	} else if targetLine < t.topLine {
+		t.topLine = targetLine
+	}
+	fmt.Print(AnsiCursorHide)
 	t.updateTextCache(es)
 	t.renderText()
 	t.renderUI(es)
+	// Reposition cursor explicitly after all rendering
+	fmt.Print(AnsiMoveCursor(targetLine-t.topLine, targetCol))
+	fmt.Print(AnsiCursorShow)
 	return nil
-}
-
-func (t *Terminal) moveCursor(line, column int) {
-	if line >= t.topLine+t.screenHeight {
-		t.topLine = line - t.screenHeight + 1
-	} else if line < t.topLine {
-		t.topLine = line
-	}
-	fmt.Print(AnsiMoveCursor(line-t.topLine, column))
 }
 
 func (t *Terminal) updateTextCache(es *core.EditorState) {
@@ -205,13 +209,11 @@ func (t *Terminal) updateTextCache(es *core.EditorState) {
 }
 
 func (t *Terminal) renderText() {
-	fmt.Print(AnsiCursorSave)
 	for i := range t.renderCache {
 		fmt.Print(AnsiMoveToLineStart(i + 1))
 		fmt.Print(AnsiEraseLine)
 		fmt.Print(t.renderCache[i])
 	}
-	fmt.Print(AnsiCursorRestore)
 }
 
 func (t *Terminal) renderUI(es *core.EditorState) {
@@ -220,7 +222,6 @@ func (t *Terminal) renderUI(es *core.EditorState) {
 		viewMode = "Markdown"
 	}
 	status := fmt.Sprintf("Line: %d, Col: %d, Mode: %s", es.CursorCurrentLine+1, es.CursorCurrentCol+1, viewMode)
-	fmt.Print(AnsiCursorSave)
 	if es.ViewMode == core.MarkdownView {
 		cacheIdx := t.markdownViewCurrentLine - t.topLine
 		if cacheIdx >= 0 && cacheIdx < t.screenHeight-1 {
@@ -234,7 +235,6 @@ func (t *Terminal) renderUI(es *core.EditorState) {
 	fmt.Print(AnsiEraseLine)
 	fmt.Print(status)
 	fmt.Print(AnsiReset)
-	fmt.Print(AnsiCursorRestore)
 }
 
 func highlightLine(line string) string {

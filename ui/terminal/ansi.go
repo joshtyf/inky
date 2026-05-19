@@ -15,6 +15,7 @@ const (
 const (
 	AnsiClearScreen   = "\x1b[2J"
 	AnsiCursorHome    = "\x1b[H"
+	AnsiCursorHide    = "\x1b[?25l"
 	AnsiCursorShow    = "\x1b[?25h"
 	AnsiCursorSave    = "\x1b[s"
 	AnsiCursorRestore = "\x1b[u"
