@@ -184,6 +184,8 @@ func (e *Editor) loadFile() error {
 		e.insertRune(r)
 		i += size
 	}
+	e.currentLine = 0
+	e.currentCol = 0
 	return nil
 }
 
