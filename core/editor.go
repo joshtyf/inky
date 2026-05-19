@@ -2,9 +2,12 @@ package core
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"unicode/utf8"
 
 	"github.com/joshtyf/inky/log"
@@ -154,6 +157,17 @@ func (e *Editor) loadFile() error {
 		panic("editor filePath cannot be empty")
 	}
 	f, err := os.ReadFile(e.filePath)
+	if errors.Is(err, fs.ErrNotExist) {
+		if dirErr := os.MkdirAll(filepath.Dir(e.filePath), 0755); dirErr != nil {
+			return fmt.Errorf("could not create missing directories: %w", dirErr)
+		}
+		newFile, createErr := os.Create(e.filePath)
+		if createErr != nil {
+			return fmt.Errorf("file does not exist and could not be created: %w", createErr)
+		}
+		newFile.Close()
+		return nil
+	}
 	if err != nil {
 		return err
 	}
