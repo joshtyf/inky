@@ -92,14 +92,14 @@ func (m *MarkdownRenderer) renderDocument(w util.BufWriter, source []byte, node 
 func (m *MarkdownRenderer) renderHeading(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
 	n := node.(*ast.Heading)
 	if entering {
-		if _, err := w.WriteString("\x1b[1m"); err != nil { // Bold
+		if _, err := w.WriteString(AnsiBold); err != nil {
 			panic(err)
 		}
 		if _, err := w.WriteString(strings.Repeat("#", n.Level) + " "); err != nil {
 			panic(err)
 		}
 	} else {
-		if _, err := w.WriteString("\x1b[0m\n\n"); err != nil { // Reset
+		if _, err := w.WriteString(AnsiReset + "\n\n"); err != nil {
 			panic(err)
 		}
 	}
@@ -115,13 +115,13 @@ func (m *MarkdownRenderer) renderParagraph(w util.BufWriter, source []byte, node
 	isBlockquote := n.Parent() != nil && n.Parent().Kind() == ast.KindBlockquote
 	if entering {
 		if isBlockquote {
-			if _, err := w.WriteString("\x1b[3m> "); err != nil { // italic + blockquote marker
+			if _, err := w.WriteString(AnsiItalic + "> "); err != nil {
 				panic(err)
 			}
 		}
 	} else {
 		if isBlockquote {
-			if _, err := w.WriteString("\x1b[0m\n\n"); err != nil { // reset then newlines
+			if _, err := w.WriteString(AnsiReset + "\n\n"); err != nil { // reset then newlines
 				panic(err)
 			}
 		} else {
@@ -136,15 +136,15 @@ func (m *MarkdownRenderer) renderParagraph(w util.BufWriter, source []byte, node
 func (m *MarkdownRenderer) renderEmphasis(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
 	n := node.(*ast.Emphasis)
 	if entering {
-		tag := "\x1b[3m" // Italic
+		tag := AnsiItalic
 		if n.Level == 2 {
-			tag = "\x1b[1m" // Bold
+			tag = AnsiBold
 		}
 		if _, err := w.WriteString(tag); err != nil {
 			panic(err)
 		}
 	} else {
-		if _, err := w.WriteString("\x1b[0m"); err != nil { // Reset
+		if _, err := w.WriteString(AnsiReset); err != nil {
 			panic(err)
 		}
 	}
@@ -233,7 +233,7 @@ func (m *MarkdownRenderer) renderCodeSpan(w util.BufWriter, source []byte, node 
 	if !entering {
 		return ast.WalkContinue, nil
 	}
-	if _, err := w.WriteString("\x1b[2m`"); err != nil {
+	if _, err := w.WriteString(AnsiDim + "`"); err != nil {
 		panic(err)
 	}
 	for c := node.FirstChild(); c != nil; c = c.NextSibling() {
@@ -252,7 +252,7 @@ func (m *MarkdownRenderer) renderCodeSpan(w util.BufWriter, source []byte, node 
 			}
 		}
 	}
-	if _, err := w.WriteString("`\x1b[0m"); err != nil {
+	if _, err := w.WriteString("`" + AnsiReset); err != nil {
 		panic(err)
 	}
 	return ast.WalkSkipChildren, nil
@@ -343,7 +343,7 @@ func (m *MarkdownRenderer) renderAutoLink(w util.BufWriter, source []byte, node 
 	n := node.(*ast.AutoLink)
 	url := string(n.URL(source))
 	label := string(n.Label(source))
-	if _, err := w.WriteString("\x1b]8;;" + url + "\x1b\\" + label + "\x1b]8;;\x1b\\"); err != nil {
+	if _, err := w.WriteString(AnsiHyperlink(url, label)); err != nil {
 		panic(err)
 	}
 	return ast.WalkSkipChildren, nil

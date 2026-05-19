@@ -76,8 +76,8 @@ func (t *Terminal) Init() error {
 	if err != nil {
 		return fmt.Errorf("error setting stdin terminal attributes: %w", err)
 	}
-	fmt.Print("\x1b[2J") // Clear the screen
-	fmt.Print("\x1b[H")  // Move cursor to top-left corner
+	fmt.Print(AnsiClearScreen)
+	fmt.Print(AnsiCursorHome)
 	return nil
 }
 
@@ -92,7 +92,7 @@ func (t *Terminal) Close() error {
 	if err != nil {
 		return fmt.Errorf("error resetting stdin terminal attributes: %w", err)
 	}
-	fmt.Print("\x1b[?25h") // Ensure cursor is visible when exiting
+	fmt.Print(AnsiCursorShow)
 	return nil
 }
 
@@ -189,7 +189,7 @@ func (t *Terminal) moveCursor(line, column int) {
 	} else if line < t.topLine {
 		t.topLine = line
 	}
-	fmt.Printf("\x1b[%d;%dH", line-t.topLine, column)
+	fmt.Print(AnsiMoveCursor(line-t.topLine, column))
 }
 
 func (t *Terminal) updateTextCache(es *core.EditorState) {
@@ -205,11 +205,13 @@ func (t *Terminal) updateTextCache(es *core.EditorState) {
 }
 
 func (t *Terminal) renderText() {
-	fmt.Print("\x1b[s") // Save cursor
+	fmt.Print(AnsiCursorSave)
 	for i := range t.renderCache {
-		fmt.Printf("\x1b[%d;1H\x1b[2K%s", i+1, t.renderCache[i]) // Move to the beginning of the line, clear it, and print the new content
+		fmt.Print(AnsiMoveToLineStart(i + 1))
+		fmt.Print(AnsiEraseLine)
+		fmt.Print(t.renderCache[i])
 	}
-	fmt.Print("\x1b[u") // Restore cursor
+	fmt.Print(AnsiCursorRestore)
 }
 
 func (t *Terminal) renderUI(es *core.EditorState) {
@@ -218,20 +220,23 @@ func (t *Terminal) renderUI(es *core.EditorState) {
 		viewMode = "Markdown"
 	}
 	status := fmt.Sprintf("Line: %d, Col: %d, Mode: %s", es.CursorCurrentLine+1, es.CursorCurrentCol+1, viewMode)
-	fmt.Print("\x1b[s") // Save cursor
+	fmt.Print(AnsiCursorSave)
 	if es.ViewMode == core.MarkdownView {
 		cacheIdx := t.markdownViewCurrentLine - t.topLine
 		if cacheIdx >= 0 && cacheIdx < t.screenHeight-1 {
-			fmt.Printf("\x1b[%d;1H\x1b[2K%s", cacheIdx+1, highlightLine(t.renderCache[cacheIdx]))
+			fmt.Print(AnsiMoveToLineStart(cacheIdx + 1))
+			fmt.Print(AnsiEraseLine)
+			fmt.Print(highlightLine(t.renderCache[cacheIdx]))
 		}
 	}
-	// Highlight the status line with inverse colors
-	fmt.Printf("\x1b[%d;1H\x1b[7m\x1b[2K%s\x1b[0m", t.screenHeight, status) // Move to the last line, clear it, and print the status
-	fmt.Print("\x1b[u")                                                     // Restore cursor
+	fmt.Print(AnsiMoveToLineStart(t.screenHeight))
+	fmt.Print(AnsiInverse)
+	fmt.Print(AnsiEraseLine)
+	fmt.Print(status)
+	fmt.Print(AnsiReset)
+	fmt.Print(AnsiCursorRestore)
 }
 
 func highlightLine(line string) string {
-	const reset = "\x1b[0m"
-	const highlight = "\x1b[7m"
-	return highlight + strings.ReplaceAll(line, reset, reset+highlight) + reset
+	return AnsiInverse + strings.ReplaceAll(line, AnsiReset, AnsiReset+AnsiInverse) + AnsiReset
 }
