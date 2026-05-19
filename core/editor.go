@@ -80,7 +80,7 @@ type EditorState struct {
 	CursorCurrentLine     int
 	CursorCurrentCol      int
 	DocumentMaxLineLength int
-	GetLine               func(lineNumber int) []rune // TODO: should we return bytes or runes?
+	GetLine               func(lineNumber int) []byte
 	GetAll                func() []byte
 	ViewMode              ViewMode
 	Version               int
@@ -371,25 +371,18 @@ func (e *Editor) toggleViewMode() {
 	}
 }
 
-func (e *Editor) getLine(lineNumber int) []rune {
+func (e *Editor) getLine(lineNumber int) []byte {
 	if lineNumber < 0 {
 		panic(fmt.Sprintf("lineNumber %d is out of bounds", lineNumber))
 	}
 	if lineNumber >= len(e.lineMap) {
-		return []rune{}
+		return []byte{}
 	}
 	cursor := 0
 	for i := range lineNumber {
 		cursor += e.lineMap[i]
 	}
-	lineBytes := e.buf.Read(cursor, e.lineMap[lineNumber])
-	runes := make([]rune, 0, utf8.RuneCount(lineBytes))
-	for i := 0; i < len(lineBytes); {
-		r, size := utf8.DecodeRune(lineBytes[i:])
-		runes = append(runes, r)
-		i += size
-	}
-	return runes
+	return e.buf.Read(cursor, e.lineMap[lineNumber])
 }
 
 func (e *Editor) getAll() []byte {
