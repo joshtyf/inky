@@ -14,6 +14,16 @@ go build .
 ./inky <your markdown file>
 ```
 
+**Default Key Bindings**
+
+| Action          | Key        |
+| --------------- | ---------- |
+| Save            | `Ctrl-S`   |
+| Undo            | `Ctrl-U`   |
+| Shutdown        | `Ctrl-D`   |
+| Toggle mode     | `Esc`      |
+| Cursor Movement | Arrow Keys |
+
 ### Screenshots
 
 **Inky in raw text edit mode**
