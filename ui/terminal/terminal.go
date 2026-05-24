@@ -96,25 +96,24 @@ func (t *Terminal) Close() error {
 	return nil
 }
 
-func (t *Terminal) parseSpecialSequences(b []byte) (*core.Key, int) {
-	bufstr := string(b)
-	var matchedKey *core.Key
+func (t *Terminal) parseSpecialSequences(b []byte) (core.Key, int) {
+	var matchedKey core.Key
 	matchedKeySize := 0
 	for k, v := range keyMapping {
 		predicateLen := len(k)
-		if len(bufstr) < predicateLen {
+		if len(b) < predicateLen {
 			continue
 		}
 		// Longest prefix match
-		if strings.HasPrefix(bufstr, k) && matchedKeySize < predicateLen {
-			matchedKey = &v
+		if string(b[:predicateLen]) == k && matchedKeySize < predicateLen {
+			matchedKey = v
 			matchedKeySize = predicateLen
 		}
 	}
 	return matchedKey, matchedKeySize
 }
 
-func (t *Terminal) GetKey(ctx context.Context) <-chan *core.Key {
+func (t *Terminal) GetKey(ctx context.Context) <-chan core.Key {
 	byteCh := make(chan []byte)
 	go func() {
 		defer close(byteCh)
@@ -132,8 +131,8 @@ func (t *Terminal) GetKey(ctx context.Context) <-chan *core.Key {
 			}
 		}
 	}()
-	
-	ch := make(chan *core.Key)
+
+	ch := make(chan core.Key)
 	go func() {
 		defer close(ch)
 		var buf []byte
@@ -149,7 +148,7 @@ func (t *Terminal) GetKey(ctx context.Context) <-chan *core.Key {
 
 				for len(buf) > 0 {
 					k, size := t.parseSpecialSequences(buf)
-					if k != nil {
+					if size > 0 {
 						ch <- k
 						buf = buf[size:]
 						continue
@@ -166,7 +165,7 @@ func (t *Terminal) GetKey(ctx context.Context) <-chan *core.Key {
 						continue
 					}
 
-					ch <- &core.Key{Code: core.RuneKey, Rune: r}
+					ch <- core.Key{Code: core.RuneKey, Rune: r}
 					buf = buf[size:]
 				}
 			}

@@ -59,7 +59,7 @@ type Key struct {
 type UserInterface interface {
 	Init() error
 	Close() error
-	GetKey(ctx context.Context) <-chan *Key
+	GetKey(ctx context.Context) <-chan Key
 	Update(es *EditorState) error
 }
 
@@ -125,11 +125,10 @@ func (e *Editor) Start(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	keyCh := e.ui.GetKey(ctx)
-	var key *Key
-	var keyChOpen bool
+	var lastKey *Key
 	for {
 		e.ui.Update(&EditorState{
-			LastKeyPresssed:       key,
+			LastKeyPresssed:       lastKey,
 			CursorCurrentLine:     e.currentLine,
 			CursorCurrentCol:      e.currentCol,
 			DocumentMaxLineLength: len(e.lineMap),
@@ -141,10 +140,11 @@ func (e *Editor) Start(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return nil
-		case key, keyChOpen = <-keyCh:
-			if !keyChOpen {
+		case key, ok := <-keyCh:
+			if !ok {
 				return nil
 			}
+			lastKey = &key
 			if err := e.handleKey(key); err != nil {
 				return err
 			}
@@ -202,7 +202,7 @@ func (e *Editor) saveFile() error {
 	return err
 }
 
-func (e *Editor) handleKey(key *Key) error {
+func (e *Editor) handleKey(key Key) error {
 	switch {
 	case key.Code == CtrlD:
 		return &EditorClosedError{}
@@ -227,7 +227,7 @@ func (e *Editor) handleKey(key *Key) error {
 	return nil
 }
 
-func (e *Editor) getOperationFromKey(key *Key) Operation {
+func (e *Editor) getOperationFromKey(key Key) Operation {
 	if !key.Code.IsEditOperation() {
 		panic(fmt.Sprintf("key code %d is not an edit operation", key.Code))
 	}
