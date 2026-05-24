@@ -6,11 +6,10 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"unicode/utf8"
-
-	"github.com/joshtyf/inky/log"
 )
 
 type KeyCode int
@@ -115,6 +114,7 @@ func NewEditor(filePath string, ui UserInterface, buf Buffer) *Editor {
 }
 
 func (e *Editor) Start(ctx context.Context) error {
+	slog.Info(fmt.Sprintf("Starting Editor with file at %s", e.filePath))
 	if err := e.loadFile(); err != nil {
 		return err
 	}
@@ -144,6 +144,7 @@ func (e *Editor) Start(ctx context.Context) error {
 			if !ok {
 				return nil
 			}
+			slog.Debug("Handling key", "key", key)
 			lastKey = &key
 			if err := e.handleKey(key); err != nil {
 				return err
@@ -223,7 +224,6 @@ func (e *Editor) handleKey(key Key) error {
 		e.applyOperation(op)
 		e.recordOperation(op)
 	}
-	e.debug()
 	return nil
 }
 
@@ -411,9 +411,4 @@ func (e *Editor) recordOperation(op Operation) {
 			e.operations = append(e.operations, op)
 		}
 	}
-	log.Info(fmt.Sprintf("Current operations: %+v", e.operations))
-}
-
-func (e *Editor) debug() {
-	log.Info(fmt.Sprintf("Current line: %d, current col: %d", e.currentLine, e.currentCol))
 }
