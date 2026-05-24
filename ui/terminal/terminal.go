@@ -115,39 +115,59 @@ func (t *Terminal) parseSpecialSequences(b []byte) (*core.Key, int) {
 }
 
 func (t *Terminal) GetKey(ctx context.Context) <-chan *core.Key {
+	byteCh := make(chan []byte)
+	go func() {
+		defer close(byteCh)
+		for {
+			const INPUT_BUFFER_SIZE = 256
+			var b [INPUT_BUFFER_SIZE]byte
+			n, err := os.Stdin.Read(b[:])
+			if err != nil {
+				return // Graceful exit on read error (e.g., EOF or closed stdin)
+			}
+			if n > 0 {
+				chunk := make([]byte, n)
+				copy(chunk, b[:n])
+				byteCh <- chunk
+			}
+		}
+	}()
+	
 	ch := make(chan *core.Key)
 	go func() {
 		defer close(ch)
+		var buf []byte
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			default:
-				const INPUT_BUFFER_SIZE = 256
-				var b [INPUT_BUFFER_SIZE]byte
-				n, err := os.Stdin.Read(b[:])
-				if err != nil {
-					panic("input failed: " + err.Error())
+			case chunk, ok := <-byteCh:
+				if !ok {
+					return
 				}
-				for i := 0; i < n; i++ {
-					k, size := t.parseSpecialSequences(b[i:])
+				buf = append(buf, chunk...)
+
+				for len(buf) > 0 {
+					k, size := t.parseSpecialSequences(buf)
 					if k != nil {
 						ch <- k
-						i += size - 1 // Move to the next character after the escape sequence
+						buf = buf[size:]
 						continue
 					}
 
-					// If we reach here, then we try to decode the bytes as a rune
-					r, size := utf8.DecodeRune(b[i:])
-					if r == utf8.RuneError {
-						if size == 1 {
-							panic(fmt.Sprintf("error decoding rune: invalid byte sequence %v", b[i:]))
-						} else {
-							panic("error decoding rune: empty byte sequence")
-						}
+					if !utf8.FullRune(buf) {
+						break // Wait for more bytes to complete the rune
 					}
+
+					r, size := utf8.DecodeRune(buf)
+					if r == utf8.RuneError {
+						// Skip invalid byte instead of panicking
+						buf = buf[1:]
+						continue
+					}
+
 					ch <- &core.Key{Code: core.RuneKey, Rune: r}
-					i += size - 1 // Move to the next sequence
+					buf = buf[size:]
 				}
 			}
 		}
