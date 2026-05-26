@@ -113,6 +113,20 @@ func (t *Terminal) parseSpecialSequences(b []byte) (core.Key, int) {
 	return matchedKey, matchedKeySize
 }
 
+func (t *Terminal) Start(ctx context.Context) (<-chan core.Key, error) {
+	err := t.Init()
+	if err != nil {
+		return nil, err
+	}
+	// Not sure if the return type is appropriate.
+	go func() {
+		for range ctx.Done() {
+			t.Close()
+		}
+	}()
+	return t.GetKey(ctx), nil
+}
+
 func (t *Terminal) GetKey(ctx context.Context) <-chan core.Key {
 	byteCh := make(chan []byte)
 	go func() {

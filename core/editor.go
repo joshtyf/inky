@@ -56,9 +56,7 @@ type Key struct {
 }
 
 type UserInterface interface {
-	Init() error
-	Close() error
-	GetKey(ctx context.Context) <-chan Key
+	Start(ctx context.Context) (<-chan Key, error)
 	Update(es *EditorState) error
 }
 
@@ -118,13 +116,12 @@ func (e *Editor) Start(ctx context.Context) error {
 	if err := e.loadFile(); err != nil {
 		return err
 	}
-	if err := e.ui.Init(); err != nil {
-		return err
-	}
-	defer e.ui.Close()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	keyCh := e.ui.GetKey(ctx)
+	keyCh, err := e.ui.Start(ctx)
+	if err != nil {
+		return err
+	}
 	var lastKey *Key
 	for {
 		e.ui.Update(&EditorState{
