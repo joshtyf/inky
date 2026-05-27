@@ -48,6 +48,8 @@ type Terminal struct {
 	renderCache             []string
 	markdownViewCurrentLine int
 	lastContentVersion      int
+	lastEditorState         *core.EditorState
+	renderCh                chan<- struct{}
 }
 
 func NewTerminal() *Terminal {
@@ -62,6 +64,8 @@ func NewTerminal() *Terminal {
 		renderCache:             make([]string, h-1),
 		markdownViewCurrentLine: 0,
 		lastContentVersion:      -1,
+		lastEditorState:         nil,
+		renderCh:                nil,
 	}
 }
 
@@ -124,6 +128,7 @@ func (t *Terminal) Start(ctx context.Context) (<-chan core.Key, error) {
 			t.Close()
 		}
 	}()
+	t.renderCh = t.runRenderLoop(ctx)
 	return t.GetKey(ctx), nil
 }
 
@@ -227,6 +232,59 @@ func (t *Terminal) Update(es *core.EditorState) error {
 	fmt.Print(AnsiMoveCursor(targetLine-t.topLine+1, targetCol))
 	fmt.Print(AnsiCursorShow)
 	return nil
+}
+
+func (t *Terminal) runRenderLoop(ctx context.Context) chan<- struct{} {
+	signalCh := make(chan struct{})
+	go func() {
+		defer close(signalCh)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-signalCh:
+				es := t.lastEditorState
+				if es.Version != t.lastContentVersion {
+					t.markdownViewCurrentLine = 0
+					t.lastContentVersion = es.Version
+				}
+				if es.ViewMode == core.MarkdownView && es.LastKeyPresssed != nil {
+					switch es.LastKeyPresssed.Code {
+					case core.ArrowDown:
+						if t.markdownViewCurrentLine < renderers[core.MarkdownView].LastLine(es) {
+							t.markdownViewCurrentLine++
+						}
+					case core.ArrowUp:
+						if t.markdownViewCurrentLine > 0 {
+							t.markdownViewCurrentLine--
+						}
+					}
+				}
+				var targetLine, targetCol int
+				if es.ViewMode == core.MarkdownView {
+					targetLine = t.markdownViewCurrentLine
+					targetCol = 1
+				} else {
+					targetLine = es.CursorCurrentLine
+					targetCol = es.CursorCurrentCol + 1
+				}
+				// Update topLine for scrolling before rendering
+				if targetLine >= t.topLine+t.screenHeight-1 {
+					t.topLine = targetLine - t.screenHeight + 2
+				} else if targetLine < t.topLine {
+					t.topLine = targetLine
+				}
+				fmt.Print(AnsiCursorHide)
+				t.updateTextCache(es)
+				t.renderText()
+				t.renderUI(es)
+				// Reposition cursor explicitly after all rendering
+				fmt.Print(AnsiMoveCursor(targetLine-t.topLine+1, targetCol))
+				fmt.Print(AnsiCursorShow)
+			}
+		}
+	}()
+	return signalCh
 }
 
 func (t *Terminal) updateTextCache(es *core.EditorState) {
