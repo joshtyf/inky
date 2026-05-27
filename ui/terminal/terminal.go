@@ -254,6 +254,8 @@ func (t *Terminal) listenForResize(ctx context.Context) {
 }
 
 func (t *Terminal) processStateAndRender(es *core.EditorState) {
+	// TODO: since the renderLoop already has the last editor state, 
+	// can we do the content version check there and avoid sending redundant states to the terminal?
 	if es.Version != t.lastContentVersion {
 		t.markdownViewCurrentLine = 0
 		t.lastContentVersion = es.Version
