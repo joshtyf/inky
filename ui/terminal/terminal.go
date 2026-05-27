@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/joshtyf/inky/core"
@@ -128,6 +130,7 @@ func (t *Terminal) Start(ctx context.Context) (<-chan core.Key, error) {
 			t.Close()
 		}
 	}()
+	t.listenForResize(ctx)
 	t.renderCh = t.runRenderLoop(ctx)
 	return t.GetKey(ctx), nil
 }
@@ -253,6 +256,35 @@ func (t *Terminal) runRenderLoop(ctx context.Context) chan<- struct{} {
 		}
 	}()
 	return signalCh
+}
+
+func (t *Terminal) listenForResize(ctx context.Context) {
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, unix.SIGWINCH)
+	const DEBOUNCE_DURATION = 150 * time.Millisecond
+	timer := time.NewTimer(DEBOUNCE_DURATION)
+	timer.Stop()
+	go func() {
+		defer signal.Stop(sigCh)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-sigCh:
+				timer.Reset(DEBOUNCE_DURATION)
+			case <-timer.C:
+				_, h, err := term.GetSize(int(os.Stdout.Fd()))
+				if err != nil {
+					continue // Ignore resize errors
+				}
+				t.screenHeight = h
+				t.renderCache = make([]string, h-1)
+				if t.renderCh != nil {
+					t.renderCh <- struct{}{}
+				}
+			}
+		}
+	}()
 }
 
 func (t *Terminal) updateTextCache(es *core.EditorState) {
