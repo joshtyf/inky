@@ -51,7 +51,8 @@ type Terminal struct {
 	markdownViewCurrentLine int
 	lastContentVersion      int
 	lastEditorState         *core.EditorState
-	renderCh                chan<- struct{}
+	stateCh                 chan *core.EditorState
+	resizeCh                chan int
 }
 
 func NewTerminal() *Terminal {
@@ -67,7 +68,8 @@ func NewTerminal() *Terminal {
 		markdownViewCurrentLine: 0,
 		lastContentVersion:      -1,
 		lastEditorState:         nil,
-		renderCh:                nil,
+		stateCh:                 make(chan *core.EditorState, 1),
+		resizeCh:                make(chan int, 1),
 	}
 }
 
@@ -99,6 +101,8 @@ func (t *Terminal) Close() error {
 		return fmt.Errorf("error resetting stdin terminal attributes: %w", err)
 	}
 	fmt.Print(AnsiCursorShow)
+	close(t.stateCh)
+	close(t.resizeCh)
 	return nil
 }
 
@@ -131,7 +135,7 @@ func (t *Terminal) Start(ctx context.Context) (<-chan core.Key, error) {
 		}
 	}()
 	t.listenForResize(ctx)
-	t.renderCh = t.runRenderLoop(ctx)
+	t.runRenderLoop(ctx)
 	return t.GetKey(ctx), nil
 }
 
@@ -197,29 +201,33 @@ func (t *Terminal) GetKey(ctx context.Context) <-chan core.Key {
 }
 
 func (t *Terminal) Update(es *core.EditorState) error {
-	t.lastEditorState = es
-	if t.renderCh == nil {
-		panic("render channel not initialized")
-	}
-	t.renderCh <- struct{}{}
+	t.stateCh <- es
 	return nil
 }
 
-func (t *Terminal) runRenderLoop(ctx context.Context) chan<- struct{} {
-	signalCh := make(chan struct{})
+func (t *Terminal) runRenderLoop(ctx context.Context) {
+	var lastEditorState *core.EditorState
 	go func() {
-		defer close(signalCh)
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case <-signalCh:
-				es := t.lastEditorState
-				t.processStateAndRender(es)
+			case newState, ok := <-t.stateCh:
+				if !ok {
+					return
+				}
+				lastEditorState = newState
+				t.processStateAndRender(lastEditorState)
+			case newHeight, ok := <-t.resizeCh:
+				if !ok {
+					return
+				}
+				t.screenHeight = newHeight
+				t.renderCache = make([]string, newHeight-1)
+				t.processStateAndRender(lastEditorState)
 			}
 		}
 	}()
-	return signalCh
 }
 
 func (t *Terminal) listenForResize(ctx context.Context) {
@@ -241,11 +249,7 @@ func (t *Terminal) listenForResize(ctx context.Context) {
 				if err != nil {
 					continue // Ignore resize errors
 				}
-				t.screenHeight = h
-				t.renderCache = make([]string, h-1)
-				if t.renderCh != nil {
-					t.renderCh <- struct{}{}
-				}
+				t.resizeCh <- h
 			}
 		}
 	}()
