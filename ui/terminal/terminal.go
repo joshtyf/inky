@@ -128,11 +128,9 @@ func (t *Terminal) Start(ctx context.Context) (<-chan core.Key, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Not sure if the return type is appropriate.
 	go func() {
-		for range ctx.Done() {
-			t.Close()
-		}
+		<-ctx.Done()
+		t.Close()
 	}()
 	t.listenForResize(ctx)
 	t.runRenderLoop(ctx)
