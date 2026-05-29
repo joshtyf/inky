@@ -54,7 +54,6 @@ type Terminal struct {
 	markdownViewCurrentLine int
 	lastContentVersion      int
 	viewMode                ui.ViewMode
-	lastEditorState         *core.EditorState
 	stateCh                 chan core.EditorState
 	resizeCh                chan int
 	uiKeyCh                 chan core.Key
@@ -72,7 +71,6 @@ func NewTerminal() *Terminal {
 		renderCache:             make([]string, h-1),
 		markdownViewCurrentLine: 0,
 		lastContentVersion:      -1,
-		lastEditorState:         nil,
 		stateCh:                 make(chan core.EditorState, 1),
 		resizeCh:                make(chan int, 1),
 		uiKeyCh:                 make(chan core.Key, 1),
