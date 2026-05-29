@@ -10,9 +10,12 @@ import (
 	"unicode/utf8"
 
 	"github.com/joshtyf/inky/core"
+	"github.com/joshtyf/inky/ui"
 	"golang.org/x/sys/unix"
 	"golang.org/x/term"
 )
+
+const ToggleViewMode core.KeyCode = 100 // Arbitrary code that doesn't conflict with existing core.KeyCodes
 
 var keyMapping = map[string]core.Key{
 	// Escape Sequences
@@ -24,7 +27,7 @@ var keyMapping = map[string]core.Key{
 	"\x1b[1;2B": {Code: core.ShiftArrowDown},
 	"\x1b[1;2C": {Code: core.ShiftArrowRight},
 	"\x1b[1;2D": {Code: core.ShiftArrowLeft},
-	"\x1b":      {Code: core.ToggleViewMode},
+	"\x1b":      {Code: ToggleViewMode},
 
 	// Control Keys
 	"\x04": {Code: core.CtrlD},
@@ -38,9 +41,9 @@ type Renderer interface {
 	LastLine(es core.EditorState) int
 }
 
-var renderers = map[core.ViewMode]Renderer{
-	core.MarkdownView: NewMarkdownRenderer(),
-	core.RawView:      NewRawRenderer(),
+var renderers = map[ui.ViewMode]Renderer{
+	ui.MarkdownView: NewMarkdownRenderer(),
+	ui.RawView:      NewRawRenderer(),
 }
 
 type Terminal struct {
@@ -50,9 +53,11 @@ type Terminal struct {
 	renderCache             []string
 	markdownViewCurrentLine int
 	lastContentVersion      int
+	viewMode                ui.ViewMode
 	lastEditorState         *core.EditorState
 	stateCh                 chan core.EditorState
 	resizeCh                chan int
+	uiKeyCh                 chan core.Key
 }
 
 func NewTerminal() *Terminal {
@@ -70,6 +75,7 @@ func NewTerminal() *Terminal {
 		lastEditorState:         nil,
 		stateCh:                 make(chan core.EditorState, 1),
 		resizeCh:                make(chan int, 1),
+		uiKeyCh:                 make(chan core.Key, 1),
 	}
 }
 
@@ -103,6 +109,7 @@ func (t *Terminal) Close() error {
 	fmt.Print(AnsiCursorShow)
 	close(t.stateCh)
 	close(t.resizeCh)
+	close(t.uiKeyCh)
 	return nil
 }
 
@@ -173,7 +180,11 @@ func (t *Terminal) GetKey(ctx context.Context) <-chan core.Key {
 				for len(buf) > 0 {
 					k, size := t.parseSpecialSequences(buf)
 					if size > 0 {
-						editorCh <- k
+						if (t.viewMode == ui.MarkdownView && (k.Code.IsMovementKey())) || k.Code == ToggleViewMode {
+							t.uiKeyCh <- k
+						} else {
+							editorCh <- k
+						}
 						buf = buf[size:]
 						continue
 					}
@@ -189,7 +200,9 @@ func (t *Terminal) GetKey(ctx context.Context) <-chan core.Key {
 						continue
 					}
 
-					editorCh <- core.Key{Code: core.RuneKey, Rune: r}
+					if t.viewMode != ui.MarkdownView {
+						editorCh <- core.Key{Code: core.RuneKey, Rune: r}
+					}
 					buf = buf[size:]
 				}
 			}
@@ -215,15 +228,19 @@ func (t *Terminal) runRenderLoop(ctx context.Context) {
 					return
 				}
 				lastEditorState = newState
-				t.processStateAndRender(lastEditorState)
+			case uiKey, ok := <-t.uiKeyCh:
+				if !ok {
+					return
+				}
+				t.processUiKey(uiKey, lastEditorState)
 			case newHeight, ok := <-t.resizeCh:
 				if !ok {
 					return
 				}
 				t.screenHeight = newHeight
 				t.renderCache = make([]string, newHeight-1)
-				t.processStateAndRender(lastEditorState)
 			}
+			t.processStateAndRender(lastEditorState)
 		}
 	}()
 }
@@ -253,6 +270,25 @@ func (t *Terminal) listenForResize(ctx context.Context) {
 	}()
 }
 
+func (t *Terminal) processUiKey(key core.Key, es core.EditorState) {
+	switch key.Code {
+	case ToggleViewMode:
+		if t.viewMode == ui.MarkdownView {
+			t.viewMode = ui.RawView
+		} else {
+			t.viewMode = ui.MarkdownView
+		}
+	case core.ArrowDown:
+		if t.markdownViewCurrentLine < renderers[ui.MarkdownView].LastLine(es) {
+			t.markdownViewCurrentLine++
+		}
+	case core.ArrowUp:
+		if t.markdownViewCurrentLine > 0 {
+			t.markdownViewCurrentLine--
+		}
+	}
+}
+
 func (t *Terminal) processStateAndRender(es core.EditorState) {
 	// TODO: since the renderLoop already has the last editor state,
 	// can we do the content version check there and avoid sending redundant states to the terminal?
@@ -260,20 +296,9 @@ func (t *Terminal) processStateAndRender(es core.EditorState) {
 		t.markdownViewCurrentLine = 0
 		t.lastContentVersion = es.Version
 	}
-	if es.ViewMode == core.MarkdownView && es.LastKeyPresssed != nil {
-		switch es.LastKeyPresssed.Code {
-		case core.ArrowDown:
-			if t.markdownViewCurrentLine < renderers[core.MarkdownView].LastLine(es) {
-				t.markdownViewCurrentLine++
-			}
-		case core.ArrowUp:
-			if t.markdownViewCurrentLine > 0 {
-				t.markdownViewCurrentLine--
-			}
-		}
-	}
+
 	var targetLine, targetCol int
-	if es.ViewMode == core.MarkdownView {
+	if t.viewMode == ui.MarkdownView {
 		targetLine = t.markdownViewCurrentLine
 		targetCol = 1
 	} else {
@@ -296,7 +321,7 @@ func (t *Terminal) processStateAndRender(es core.EditorState) {
 }
 
 func (t *Terminal) updateTextCache(es core.EditorState) {
-	renderer := renderers[es.ViewMode]
+	renderer := renderers[t.viewMode]
 	for i := 0; i < t.screenHeight-1; i++ {
 		lineNum := t.topLine + i
 		line, err := renderer.Render(lineNum, es)
@@ -317,10 +342,10 @@ func (t *Terminal) renderText() {
 
 func (t *Terminal) renderUI(es core.EditorState) {
 	viewMode := "Raw"
-	if es.ViewMode == core.MarkdownView {
+	if t.viewMode == ui.MarkdownView {
 		viewMode = "Markdown"
 	}
-	if es.ViewMode == core.MarkdownView {
+	if t.viewMode == ui.MarkdownView {
 		cacheIdx := t.markdownViewCurrentLine - t.topLine
 		if cacheIdx >= 0 && cacheIdx < t.screenHeight-1 {
 			fmt.Print(AnsiMoveToLineStart(cacheIdx + 1))
@@ -329,7 +354,7 @@ func (t *Terminal) renderUI(es core.EditorState) {
 		}
 	}
 	var status string
-	if es.ViewMode == core.MarkdownView {
+	if t.viewMode == ui.MarkdownView {
 		status = fmt.Sprintf("Line: %d, Mode: %s", t.markdownViewCurrentLine+1, viewMode)
 	} else {
 		status = fmt.Sprintf("Line: %d, Col: %d, Mode: %s", es.CursorCurrentLine+1, es.CursorCurrentCol+1, viewMode)

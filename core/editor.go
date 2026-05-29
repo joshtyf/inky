@@ -29,14 +29,6 @@ const (
 	Backspace
 	Undo
 	Save
-	ToggleViewMode
-)
-
-type ViewMode int
-
-const (
-	MarkdownView ViewMode = iota
-	RawView
 )
 
 func (k KeyCode) IsMovementKey() bool {
@@ -80,7 +72,6 @@ type EditorState struct {
 	DocumentMaxLineLength int
 	GetLine               func(lineNumber int) []byte
 	GetAll                func() []byte
-	ViewMode              ViewMode
 	Version               int
 }
 
@@ -93,7 +84,6 @@ type Editor struct {
 	lineMap     []int
 	currentLine int
 	currentCol  int
-	viewMode    ViewMode
 	operations  []Operation
 	version     int
 }
@@ -107,7 +97,6 @@ func NewEditor(filePath string, ui UserInterface, buf Buffer) *Editor {
 		lineMap:     lineMap,
 		currentLine: 0,
 		currentCol:  0,
-		viewMode:    RawView,
 		version:     0,
 	}
 }
@@ -132,7 +121,6 @@ func (e *Editor) Start(ctx context.Context) error {
 			DocumentMaxLineLength: len(e.lineMap),
 			GetLine:               e.getLine,
 			GetAll:                e.getAll,
-			ViewMode:              e.viewMode,
 			Version:               e.version,
 		})
 		select {
@@ -205,19 +193,17 @@ func (e *Editor) handleKey(key Key) error {
 	switch {
 	case key.Code == CtrlD:
 		return &EditorClosedError{}
-	case key.Code == ToggleViewMode:
-		e.toggleViewMode()
 	case key.Code == Save:
 		e.saveFile()
-	case key.Code == ArrowUp && e.viewMode == RawView:
+	case key.Code == ArrowUp:
 		e.moveCursorUp()
-	case key.Code == ArrowDown && e.viewMode == RawView:
+	case key.Code == ArrowDown:
 		e.moveCursorDown()
-	case key.Code == ArrowLeft && e.viewMode == RawView:
+	case key.Code == ArrowLeft:
 		e.moveCursorLeft()
-	case key.Code == ArrowRight && e.viewMode == RawView:
+	case key.Code == ArrowRight:
 		e.moveCursorRight()
-	case key.Code.IsEditOperation() && e.viewMode == RawView:
+	case key.Code.IsEditOperation():
 		op := e.getOperationFromKey(key)
 		e.applyOperation(op)
 		e.recordOperation(op)
@@ -360,14 +346,6 @@ func (e *Editor) backspace() {
 		newLineMap[e.currentLine] = e.lineMap[e.currentLine] + e.lineMap[e.currentLine+1]
 		copy(newLineMap[e.currentLine+1:], e.lineMap[e.currentLine+2:])
 		e.lineMap = newLineMap
-	}
-}
-
-func (e *Editor) toggleViewMode() {
-	if e.viewMode == MarkdownView {
-		e.viewMode = RawView
-	} else {
-		e.viewMode = MarkdownView
 	}
 }
 
