@@ -74,7 +74,7 @@ type Buffer interface {
 }
 
 type EditorState struct {
-	LastKeyPresssed       *Key
+	LastKeyPresssed       Key
 	CursorCurrentLine     int
 	CursorCurrentCol      int
 	DocumentMaxLineLength int
@@ -123,7 +123,7 @@ func (e *Editor) Start(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	var lastKey *Key
+	var lastKey Key
 	for {
 		e.ui.Update(EditorState{
 			LastKeyPresssed:       lastKey,
@@ -143,7 +143,7 @@ func (e *Editor) Start(ctx context.Context) error {
 				return nil
 			}
 			slog.Debug("Handling key", "key", key)
-			lastKey = &key
+			lastKey = key
 			if err := e.handleKey(key); err != nil {
 				return err
 			}
