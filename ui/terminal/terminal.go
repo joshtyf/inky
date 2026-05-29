@@ -277,6 +277,10 @@ func (t *Terminal) processUiKey(key core.Key, es core.EditorState) {
 			t.viewMode = ui.RawView
 		} else {
 			t.viewMode = ui.MarkdownView
+			if es.Version != t.lastContentVersion {
+				t.markdownViewCurrentLine = 0
+				t.lastContentVersion = es.Version
+			}
 		}
 	case core.ArrowDown:
 		if t.markdownViewCurrentLine < renderers[ui.MarkdownView].LastLine(es) {
@@ -290,13 +294,6 @@ func (t *Terminal) processUiKey(key core.Key, es core.EditorState) {
 }
 
 func (t *Terminal) processStateAndRender(es core.EditorState) {
-	// TODO: since the renderLoop already has the last editor state,
-	// can we do the content version check there and avoid sending redundant states to the terminal?
-	if es.Version != t.lastContentVersion {
-		t.markdownViewCurrentLine = 0
-		t.lastContentVersion = es.Version
-	}
-
 	var targetLine, targetCol int
 	if t.viewMode == ui.MarkdownView {
 		targetLine = t.markdownViewCurrentLine
