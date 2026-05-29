@@ -254,7 +254,7 @@ func (t *Terminal) listenForResize(ctx context.Context) {
 }
 
 func (t *Terminal) processStateAndRender(es *core.EditorState) {
-	// TODO: since the renderLoop already has the last editor state, 
+	// TODO: since the renderLoop already has the last editor state,
 	// can we do the content version check there and avoid sending redundant states to the terminal?
 	if es.Version != t.lastContentVersion {
 		t.markdownViewCurrentLine = 0
@@ -320,7 +320,6 @@ func (t *Terminal) renderUI(es *core.EditorState) {
 	if es.ViewMode == core.MarkdownView {
 		viewMode = "Markdown"
 	}
-	status := fmt.Sprintf("Line: %d, Col: %d, Mode: %s", es.CursorCurrentLine+1, es.CursorCurrentCol+1, viewMode)
 	if es.ViewMode == core.MarkdownView {
 		cacheIdx := t.markdownViewCurrentLine - t.topLine
 		if cacheIdx >= 0 && cacheIdx < t.screenHeight-1 {
@@ -328,6 +327,12 @@ func (t *Terminal) renderUI(es *core.EditorState) {
 			fmt.Print(AnsiEraseLine)
 			fmt.Print(highlightLine(t.renderCache[cacheIdx]))
 		}
+	}
+	var status string
+	if es.ViewMode == core.MarkdownView {
+		status = fmt.Sprintf("Line: %d, Mode: %s", t.markdownViewCurrentLine+1, viewMode)
+	} else {
+		status = fmt.Sprintf("Line: %d, Col: %d, Mode: %s", es.CursorCurrentLine+1, es.CursorCurrentCol+1, viewMode)
 	}
 	fmt.Print(AnsiMoveToLineStart(t.screenHeight))
 	fmt.Print(AnsiInverse)
