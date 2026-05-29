@@ -57,7 +57,7 @@ type Key struct {
 
 type UserInterface interface {
 	Start(ctx context.Context) (<-chan Key, error)
-	Update(es *EditorState) error
+	Update(es EditorState) error
 }
 
 type Buffer interface {
@@ -124,7 +124,7 @@ func (e *Editor) Start(ctx context.Context) error {
 	}
 	var lastKey *Key
 	for {
-		e.ui.Update(&EditorState{
+		e.ui.Update(EditorState{
 			LastKeyPresssed:       lastKey,
 			CursorCurrentLine:     e.currentLine,
 			CursorCurrentCol:      e.currentCol,

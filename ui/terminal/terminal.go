@@ -34,8 +34,8 @@ var keyMapping = map[string]core.Key{
 }
 
 type Renderer interface {
-	Render(line int, es *core.EditorState) (string, error)
-	LastLine(es *core.EditorState) int
+	Render(line int, es core.EditorState) (string, error)
+	LastLine(es core.EditorState) int
 }
 
 var renderers = map[core.ViewMode]Renderer{
@@ -51,7 +51,7 @@ type Terminal struct {
 	markdownViewCurrentLine int
 	lastContentVersion      int
 	lastEditorState         *core.EditorState
-	stateCh                 chan *core.EditorState
+	stateCh                 chan core.EditorState
 	resizeCh                chan int
 }
 
@@ -68,7 +68,7 @@ func NewTerminal() *Terminal {
 		markdownViewCurrentLine: 0,
 		lastContentVersion:      -1,
 		lastEditorState:         nil,
-		stateCh:                 make(chan *core.EditorState, 1),
+		stateCh:                 make(chan core.EditorState, 1),
 		resizeCh:                make(chan int, 1),
 	}
 }
@@ -198,13 +198,13 @@ func (t *Terminal) GetKey(ctx context.Context) <-chan core.Key {
 	return ch
 }
 
-func (t *Terminal) Update(es *core.EditorState) error {
+func (t *Terminal) Update(es core.EditorState) error {
 	t.stateCh <- es
 	return nil
 }
 
 func (t *Terminal) runRenderLoop(ctx context.Context) {
-	var lastEditorState *core.EditorState
+	var lastEditorState core.EditorState
 	go func() {
 		for {
 			select {
@@ -253,7 +253,7 @@ func (t *Terminal) listenForResize(ctx context.Context) {
 	}()
 }
 
-func (t *Terminal) processStateAndRender(es *core.EditorState) {
+func (t *Terminal) processStateAndRender(es core.EditorState) {
 	// TODO: since the renderLoop already has the last editor state,
 	// can we do the content version check there and avoid sending redundant states to the terminal?
 	if es.Version != t.lastContentVersion {
@@ -295,7 +295,7 @@ func (t *Terminal) processStateAndRender(es *core.EditorState) {
 	fmt.Print(AnsiCursorShow)
 }
 
-func (t *Terminal) updateTextCache(es *core.EditorState) {
+func (t *Terminal) updateTextCache(es core.EditorState) {
 	renderer := renderers[es.ViewMode]
 	for i := 0; i < t.screenHeight-1; i++ {
 		lineNum := t.topLine + i
@@ -315,7 +315,7 @@ func (t *Terminal) renderText() {
 	}
 }
 
-func (t *Terminal) renderUI(es *core.EditorState) {
+func (t *Terminal) renderUI(es core.EditorState) {
 	viewMode := "Raw"
 	if es.ViewMode == core.MarkdownView {
 		viewMode = "Markdown"

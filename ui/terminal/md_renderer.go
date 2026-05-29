@@ -30,11 +30,11 @@ func NewMarkdownRenderer() *MarkdownRenderer {
 	}
 }
 
-func (m *MarkdownRenderer) LastLine(es *core.EditorState) int {
+func (m *MarkdownRenderer) LastLine(es core.EditorState) int {
 	return len(m.renderCache) - 1
 }
 
-func (m *MarkdownRenderer) Render(line int, es *core.EditorState) (string, error) {
+func (m *MarkdownRenderer) Render(line int, es core.EditorState) (string, error) {
 	if m.renderCache == nil || es.Version != m.lastRenderedVersion {
 		gm := goldmark.New(
 			goldmark.WithRenderer(
