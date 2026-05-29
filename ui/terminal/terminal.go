@@ -180,7 +180,7 @@ func (t *Terminal) GetKey(ctx context.Context) <-chan core.Key {
 				for len(buf) > 0 {
 					k, size := t.parseSpecialSequences(buf)
 					if size > 0 {
-						if (t.viewMode == ui.MarkdownView && (k.Code.IsMovementKey())) || k.Code == ToggleViewMode {
+						if (t.viewMode == ui.MarkdownView && k.Code.IsMovementKey()) || k.Code == ToggleViewMode {
 							t.uiKeyCh <- k
 						} else {
 							editorCh <- k
