@@ -15,7 +15,8 @@ import (
 type KeyCode int
 
 const (
-	RuneKey KeyCode = iota
+	NoKey KeyCode = iota
+	RuneKey
 	ArrowUp
 	ArrowDown
 	ArrowLeft
