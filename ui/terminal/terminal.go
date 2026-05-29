@@ -156,9 +156,9 @@ func (t *Terminal) GetKey(ctx context.Context) <-chan core.Key {
 		}
 	}()
 
-	ch := make(chan core.Key)
+	editorCh := make(chan core.Key)
 	go func() {
-		defer close(ch)
+		defer close(editorCh)
 		var buf []byte
 		for {
 			select {
@@ -173,7 +173,7 @@ func (t *Terminal) GetKey(ctx context.Context) <-chan core.Key {
 				for len(buf) > 0 {
 					k, size := t.parseSpecialSequences(buf)
 					if size > 0 {
-						ch <- k
+						editorCh <- k
 						buf = buf[size:]
 						continue
 					}
@@ -189,13 +189,13 @@ func (t *Terminal) GetKey(ctx context.Context) <-chan core.Key {
 						continue
 					}
 
-					ch <- core.Key{Code: core.RuneKey, Rune: r}
+					editorCh <- core.Key{Code: core.RuneKey, Rune: r}
 					buf = buf[size:]
 				}
 			}
 		}
 	}()
-	return ch
+	return editorCh
 }
 
 func (t *Terminal) Update(es core.EditorState) error {
