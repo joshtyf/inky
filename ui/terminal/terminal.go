@@ -71,6 +71,7 @@ func NewTerminal() *Terminal {
 		renderCache:             make([]string, h-1),
 		markdownViewCurrentLine: 0,
 		lastContentVersion:      -1,
+		viewMode:                ui.RawView,
 		stateCh:                 make(chan core.EditorState, 1),
 		resizeCh:                make(chan int, 1),
 		uiKeyCh:                 make(chan core.Key, 1),
