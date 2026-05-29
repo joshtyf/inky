@@ -342,11 +342,14 @@ func (t *Terminal) renderUI(es core.EditorState) {
 	}
 	if t.viewMode == ui.MarkdownView {
 		cacheIdx := t.markdownViewCurrentLine - t.topLine
-		if cacheIdx >= 0 && cacheIdx < t.screenHeight-1 {
-			fmt.Print(AnsiMoveToLineStart(cacheIdx + 1))
-			fmt.Print(AnsiEraseLine)
-			fmt.Print(highlightLine(t.renderCache[cacheIdx]))
+		if !(cacheIdx >= 0 && cacheIdx < t.screenHeight-1) {
+			// Should never happen since we adjust topLine in processStateAndRender, but just in case, we want to panic instead of silently doing the wrong thing
+			panic(fmt.Sprintf("cacheIdx %d is out of bounds for screenHeight %d and topLine %d", cacheIdx, t.screenHeight, t.topLine))
 		}
+		fmt.Print(AnsiMoveToLineStart(cacheIdx + 1))
+		fmt.Print(AnsiEraseLine)
+		fmt.Print(highlightLine(t.renderCache[cacheIdx]))
+
 	}
 	var status string
 	if t.viewMode == ui.MarkdownView {
