@@ -159,7 +159,9 @@ func (e *Editor) loadFile() error {
 	if err != nil {
 		return err
 	}
+	e.buf.Load(f)
 	i := 0
+	lineMapIdx := 0
 	for i < len(f) {
 		r, size := utf8.DecodeRune(f[i:])
 		if r == utf8.RuneError {
@@ -169,11 +171,13 @@ func (e *Editor) loadFile() error {
 				return fmt.Errorf("error decoding rune: empty byte sequence")
 			}
 		}
-		e.insertRune(r)
+		e.lineMap[lineMapIdx]++
+		if r == '\n' {
+			lineMapIdx++
+			e.lineMap = append(e.lineMap, 0)
+		}
 		i += size
 	}
-	e.currentLine = 0
-	e.currentCol = 0
 	return nil
 }
 
