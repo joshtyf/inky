@@ -152,6 +152,15 @@ func (gb *GapBuffer) ReadAll() []byte {
 	return contents
 }
 
+func (gb *GapBuffer) Load(data []byte) {
+	if len(data) > len(gb.buffer) {
+		gb.resizeBuffer(len(data))
+	}
+	copy(gb.buffer[:len(data)], data)
+	gb.gapStart = len(data)
+	gb.gapEnd = len(gb.buffer)
+}
+
 func (gb *GapBuffer) InsertRune(r rune, cursor int) {
 	var rawBytes [utf8.UTFMax]byte
 	size := utf8.EncodeRune(rawBytes[:], r)

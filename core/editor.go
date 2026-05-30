@@ -55,6 +55,7 @@ type UserInterface interface {
 
 type Buffer interface {
 	InsertRune(r rune, cursor int)
+	Load(data []byte)
 	SeekToChar(cursor int, char byte, count int) int
 	ReverseSeekToChar(cursor int, char byte, count int) int
 	Read(cursor int, length int) []byte
