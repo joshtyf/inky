@@ -79,26 +79,28 @@ type EditorState struct {
 const VERSION_MODULO = 1000000
 
 type Editor struct {
-	filePath    string
-	ui          UserInterface
-	buf         Buffer
-	lineMap     []int
-	currentLine int
-	currentCol  int
-	operations  []Operation
-	version     int
+	filePath        string
+	ui              UserInterface
+	buf             Buffer
+	lineMap         []int
+	currentLine     int
+	currentCol      int
+	lineStartOffset int // The offset of the start of the current line from the beginning of the document. This is used to efficiently calculate the cursor position in the buffer without having to sum up the line lengths every time.
+	operations      []Operation
+	version         int
 }
 
 func NewEditor(filePath string, ui UserInterface, buf Buffer) *Editor {
 	lineMap := make([]int, 1)
 	return &Editor{
-		filePath:    filePath,
-		ui:          ui,
-		buf:         buf,
-		lineMap:     lineMap,
-		currentLine: 0,
-		currentCol:  0,
-		version:     0,
+		filePath:        filePath,
+		ui:              ui,
+		buf:             buf,
+		lineMap:         lineMap,
+		currentLine:     0,
+		currentCol:      0,
+		lineStartOffset: 0,
+		version:         0,
 	}
 }
 
@@ -263,12 +265,14 @@ func (e *Editor) moveCursorUp() {
 	}
 	e.currentLine--
 	e.currentCol = min(e.currentCol, e.lineMap[e.currentLine]-1) // -1 because we want to be on the last character of the previous line, not the newline char
+	e.lineStartOffset = e.lineStartOffset - e.lineMap[e.currentLine]
 }
 
 func (e *Editor) moveCursorDown() {
 	if e.currentLine >= len(e.lineMap)-1 {
 		return
 	}
+	e.lineStartOffset = e.lineStartOffset + e.lineMap[e.currentLine]
 	e.currentLine++
 	limit := e.lineMap[e.currentLine]
 	if e.currentLine < len(e.lineMap)-1 {
@@ -284,6 +288,7 @@ func (e *Editor) moveCursorRight() {
 	// If we're at the end of the line and there is another line,
 	// move to the beginning of the next line
 	if e.currentCol == e.lineMap[e.currentLine] && e.currentLine < len(e.lineMap)-1 {
+		e.lineStartOffset = e.lineStartOffset + e.lineMap[e.currentLine]
 		e.currentLine++
 		e.currentCol = 0
 	}
@@ -295,6 +300,7 @@ func (e *Editor) moveCursorLeft() {
 	if e.currentCol == 0 && e.currentLine > 0 {
 		e.currentLine--
 		e.currentCol = e.lineMap[e.currentLine]
+		e.lineStartOffset = e.lineStartOffset - e.lineMap[e.currentLine]
 	}
 	if e.currentCol > 0 {
 		e.currentCol--
@@ -302,11 +308,7 @@ func (e *Editor) moveCursorLeft() {
 }
 
 func (e *Editor) getCursorPosition() int {
-	cursor := 0
-	for i := 0; i < e.currentLine; i++ {
-		cursor += e.lineMap[i]
-	}
-	return cursor + e.currentCol
+	return e.lineStartOffset + e.currentCol
 }
 
 func (e *Editor) setCursorPosition(cursor int) {
