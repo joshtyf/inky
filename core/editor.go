@@ -86,7 +86,7 @@ type Editor struct {
 	currentLine     int
 	currentCol      int
 	lineStartOffset int // The offset of the start of the current line from the beginning of the document. This is used to efficiently calculate the cursor position in the buffer without having to sum up the line lengths every time.
-	operations      []Operation
+	undoOpStack      []Operation
 	version         int
 }
 
@@ -100,6 +100,7 @@ func NewEditor(filePath string, ui UserInterface, buf Buffer) *Editor {
 		currentLine:     0,
 		currentCol:      0,
 		lineStartOffset: 0,
+		undoOpStack:     []Operation{},
 		version:         0,
 	}
 }
@@ -244,18 +245,18 @@ func (e *Editor) applyOperation(op Operation) {
 }
 
 func (e *Editor) getLastOperation() Operation {
-	if len(e.operations) == 0 {
+	if len(e.undoOpStack) == 0 {
 		return NewNoOp()
 	}
-	return e.operations[len(e.operations)-1]
+	return e.undoOpStack[len(e.undoOpStack)-1]
 }
 
 func (e *Editor) popLastOperation() Operation {
-	if len(e.operations) == 0 {
+	if len(e.undoOpStack) == 0 {
 		return NewNoOp()
 	}
-	op := e.operations[len(e.operations)-1]
-	e.operations = e.operations[:len(e.operations)-1]
+	op := e.undoOpStack[len(e.undoOpStack)-1]
+	e.undoOpStack = e.undoOpStack[:len(e.undoOpStack)-1]
 	return op
 }
 
@@ -384,14 +385,14 @@ func (e *Editor) recordOperation(op Operation) {
 	if _, ok := op.(NoOp); ok {
 		return
 	}
-	if len(e.operations) == 0 {
-		e.operations = append(e.operations, op)
+	if len(e.undoOpStack) == 0 {
+		e.undoOpStack = append(e.undoOpStack, op)
 	} else {
-		lastOp := e.operations[len(e.operations)-1]
+		lastOp := e.undoOpStack[len(e.undoOpStack)-1]
 		if mergedOp, ok := lastOp.Merge(op); ok {
-			e.operations[len(e.operations)-1] = mergedOp
+			e.undoOpStack[len(e.undoOpStack)-1] = mergedOp
 		} else {
-			e.operations = append(e.operations, op)
+			e.undoOpStack = append(e.undoOpStack, op)
 		}
 	}
 }
