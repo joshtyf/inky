@@ -87,7 +87,8 @@ type Editor struct {
 	currentLine     int
 	currentCol      int
 	lineStartOffset int // The offset of the start of the current line from the beginning of the document. This is used to efficiently calculate the cursor position in the buffer without having to sum up the line lengths every time.
-	undoOpStack      []Operation
+	undoOpStack     []Operation
+	redoOpStack     []Operation
 	version         int
 }
 
@@ -102,6 +103,7 @@ func NewEditor(filePath string, ui UserInterface, buf Buffer) *Editor {
 		currentCol:      0,
 		lineStartOffset: 0,
 		undoOpStack:     []Operation{},
+		redoOpStack:     []Operation{},
 		version:         0,
 	}
 }
@@ -216,6 +218,9 @@ func (e *Editor) handleKey(key Key) error {
 		op := e.getOperationFromKey(key)
 		e.applyOperation(op)
 		e.recordOperation(op)
+		if key.Code != Undo && key.Code != Redo {
+			e.clearRedoStack()
+		}
 	}
 	return nil
 }
@@ -236,6 +241,8 @@ func (e *Editor) getOperationFromKey(key Key) Operation {
 		}
 	case Undo:
 		op = e.popLastOperation().Invert()
+	case Redo:
+		op = e.popLastRedoOperation()
 	}
 	return op
 }
@@ -254,10 +261,20 @@ func (e *Editor) getLastOperation() Operation {
 
 func (e *Editor) popLastOperation() Operation {
 	if len(e.undoOpStack) == 0 {
+		// Will accumulate NoOps in the redo stack. Should fix someday
 		return NewNoOp()
 	}
 	op := e.undoOpStack[len(e.undoOpStack)-1]
 	e.undoOpStack = e.undoOpStack[:len(e.undoOpStack)-1]
+	return op
+}
+
+func (e *Editor) popLastRedoOperation() Operation {
+	if len(e.redoOpStack) == 0 {
+		return NewNoOp()
+	}
+	op := e.redoOpStack[len(e.redoOpStack)-1]
+	e.redoOpStack = e.redoOpStack[:len(e.redoOpStack)-1]
 	return op
 }
 
@@ -380,7 +397,8 @@ func (e *Editor) recordOperation(op Operation) {
 	if op == nil {
 		return
 	}
-	if _, ok := op.(InvertedOperation); ok {
+	if invertedOp, ok := op.(InvertedOperation); ok {
+		e.redoOpStack = append(e.redoOpStack, invertedOp.Invert())
 		return
 	}
 	if _, ok := op.(NoOp); ok {
@@ -396,4 +414,8 @@ func (e *Editor) recordOperation(op Operation) {
 			e.undoOpStack = append(e.undoOpStack, op)
 		}
 	}
+}
+
+func (e *Editor) clearRedoStack() {
+	e.redoOpStack = e.redoOpStack[:0]
 }
