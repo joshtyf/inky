@@ -20,6 +20,7 @@ go build .
 | --------------- | ---------- |
 | Save            | `Ctrl-S`   |
 | Undo            | `Ctrl-U`   |
+| Redo            | `Ctrl-R`   |
 | Shutdown        | `Ctrl-D`   |
 | Toggle mode     | `Esc`      |
 | Cursor Movement | Arrow Keys |
