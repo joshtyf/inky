@@ -33,7 +33,10 @@ func NewInvertedOperation(original Operation) InvertedOperation {
 }
 
 func (op InvertedOperation) Invert() Operation {
-	return op.Inner.Invert()
+	if invertedRes, ok := op.Inner.Invert().(InvertedOperation); ok {
+		return invertedRes.Inner
+	}
+	panic(fmt.Sprintf("Inverting an already inverted operation should return the original operation, but got: %+v", op.Inner.Invert()))
 }
 
 func (op InvertedOperation) Merge(other Operation) (Operation, bool) {
