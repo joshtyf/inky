@@ -44,7 +44,6 @@ Here are some features that I wish to add to Inky:
 
 - [ ] Improve editor performance (Gap Buffer and eagerly loading the entire file into memory isn't it)
 - [ ] An alternate user interface to terminal
-- [ ] Redo
 - [ ] Custom key mappings
 - [ ] Create my own Markdown parser and make it incremental (currently using [yuin/goldmark](https://github.com/yuin/goldmark))
 - [ ] More editor status information
