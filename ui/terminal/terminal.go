@@ -32,7 +32,7 @@ var keyMapping = map[string]core.Key{
 	// Control Keys
 	"\x04": {Code: core.CtrlD},
 	"\x7f": {Code: core.Backspace},
-	"\x1f": {Code: core.Undo},
+	"\x15": {Code: core.Undo},
 	"\x13": {Code: core.Save},
 }
 
