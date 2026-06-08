@@ -28,6 +28,7 @@ const (
 	CtrlD
 	Backspace
 	Undo
+	Redo
 	Save
 )
 
@@ -40,7 +41,7 @@ func (k KeyCode) IsShiftArrow() bool {
 }
 
 func (k KeyCode) IsEditOperation() bool {
-	return k == RuneKey || k == Backspace || k == Undo
+	return k == RuneKey || k == Backspace || k == Undo || k == Redo
 }
 
 type Key struct {
