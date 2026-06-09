@@ -330,11 +330,13 @@ func (t *Terminal) updateTextCache(es core.EditorState) {
 }
 
 func (t *Terminal) renderText() {
+	var sb strings.Builder
 	for i := range t.renderCache {
-		fmt.Print(AnsiMoveToLineStart(i + 1))
-		fmt.Print(AnsiEraseLine)
-		fmt.Print(t.renderCache[i])
+		sb.WriteString(AnsiMoveToLineStart(i + 1))
+		sb.WriteString(AnsiEraseLine)
+		sb.WriteString(t.renderCache[i])
 	}
+	fmt.Print(sb.String())
 }
 
 func (t *Terminal) renderUI(es core.EditorState) {
